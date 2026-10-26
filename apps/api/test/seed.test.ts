@@ -77,16 +77,41 @@ describe('runSeed', () => {
     expect(after.rows).toEqual(before.rows);
   });
 
-  it('atualiza dados do produto existente (upsert por slug) sem tocar no estoque', async () => {
+  it('nunca sobrescreve um produto existente (nome, preço e demais campos editados)', async () => {
     const [first] = seedProducts;
-    await pool.query(`UPDATE products SET name = 'Outro', price_cents = 1 WHERE slug = $1`, [
-      first!.slug,
-    ]);
+    await pool.query(
+      `UPDATE products SET name = 'Outro', price_cents = 1, description = 'editada',
+                           category = 'x', active = false WHERE slug = $1`,
+      [first!.slug],
+    );
     await runSeed(pool, silentLogger);
-    const { rows } = await pool.query('SELECT name, price_cents FROM products WHERE slug = $1', [
-      first!.slug,
-    ]);
-    expect(rows[0]).toEqual({ name: first!.name, price_cents: first!.priceCents });
+    await runSeed(pool, silentLogger);
+    const { rows } = await pool.query(
+      'SELECT name, price_cents, description, category, active FROM products WHERE slug = $1',
+      [first!.slug],
+    );
+    expect(rows[0]).toEqual({
+      name: 'Outro',
+      price_cents: 1,
+      description: 'editada',
+      category: 'x',
+      active: false,
+    });
+  });
+
+  it('cria só o que falta: o que já existe fica intacto, o que sumiu é recriado', async () => {
+    const [first, second] = seedProducts;
+    await pool.query('TRUNCATE stock_movements, order_items, products RESTART IDENTITY CASCADE');
+    await pool.query(
+      `INSERT INTO products (slug, name, description, category, price_cents, stock)
+       VALUES ($1, 'Já existia', 'd', 'c', 100, 0)`,
+      [second!.slug],
+    );
+    await runSeed(pool, silentLogger);
+    const { rows } = await pool.query('SELECT slug, name FROM products ORDER BY slug');
+    expect(rows).toHaveLength(6);
+    expect(rows.find((r) => r.slug === second!.slug)?.name).toBe('Já existia');
+    expect(rows.find((r) => r.slug === first!.slug)?.name).toBe(first!.name);
   });
 
   it('produto que existe sem movimentos recebe o initial', async () => {

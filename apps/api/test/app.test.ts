@@ -2,11 +2,12 @@ import pino from 'pino';
 import request from 'supertest';
 import { createApp } from '../src/app.js';
 import { createPool } from '../src/db/pool.js';
+import { FakeStorageService } from '../src/modules/storage/fake.storage.js';
 import { silentLogger, testDatabaseUrl } from './helpers.js';
 
 const webUrl = 'http://localhost:5173';
 const pool = createPool(testDatabaseUrl());
-const app = createApp({ pool, logger: silentLogger, webUrl });
+const app = createApp({ pool, logger: silentLogger, webUrl, storage: new FakeStorageService() });
 
 afterAll(async () => {
   await pool.end();
@@ -22,9 +23,14 @@ describe('GET /health', () => {
   it('500 no envelope de erro quando o banco está inacessível', async () => {
     const broken = createPool('postgres://x:x@127.0.0.1:1/x');
     try {
-      const res = await request(createApp({ pool: broken, logger: silentLogger, webUrl })).get(
-        '/health',
-      );
+      const res = await request(
+        createApp({
+          pool: broken,
+          logger: silentLogger,
+          webUrl,
+          storage: new FakeStorageService(),
+        }),
+      ).get('/health');
       expect(res.status).toBe(500);
       expect(res.body.error.code).toBe('INTERNAL_ERROR');
     } finally {
@@ -38,7 +44,7 @@ describe('logs de requisição', () => {
     const lines: string[] = [];
     const stream = { write: (line: string): void => void lines.push(line) };
     const logger = pino({ level: 'info' }, stream);
-    const loggingApp = createApp({ pool, logger, webUrl });
+    const loggingApp = createApp({ pool, logger, webUrl, storage: new FakeStorageService() });
 
     await request(loggingApp)
       .get('/health')

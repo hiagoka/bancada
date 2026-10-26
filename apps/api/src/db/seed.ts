@@ -62,25 +62,28 @@ export const seedProducts: SeedProduct[] = [
   }),
 ];
 
-// Upsert por slug. O estoque só entra pelo movimento 'initial', e só quando o produto
-// ainda não tem nenhum movimento: rodar de novo não duplica nem mexe no estoque atual.
+// Cria só o que falta (ON CONFLICT (slug) DO NOTHING): nunca sobrescreve um produto existente,
+// então edições feitas pelo admin sobrevivem. O estoque só entra pelo movimento 'initial', e só
+// quando o produto ainda não tem nenhum movimento: rodar de novo não duplica nem mexe no estoque.
 export async function runSeed(pool: Pool, logger?: Logger): Promise<void> {
   for (const item of seedProducts) {
     await withTransaction(pool, async (client) => {
-      // O upsert trava a linha, então seeds simultâneos se serializam aqui.
-      const { rows } = await client.query<{ id: string }>(
+      const inserted = await client.query<{ id: string }>(
         `INSERT INTO products (slug, name, description, category, price_cents, stock)
          VALUES ($1, $2, $3, $4, $5, 0)
-         ON CONFLICT (slug) DO UPDATE
-           SET name = EXCLUDED.name,
-               description = EXCLUDED.description,
-               category = EXCLUDED.category,
-               price_cents = EXCLUDED.price_cents,
-               updated_at = now()
+         ON CONFLICT (slug) DO NOTHING
          RETURNING id`,
         [item.slug, item.name, item.description, item.category, item.priceCents],
       );
-      const productId = rows[0]!.id;
+      // Já existia: trava a linha para que seeds simultâneos se serializem na checagem abaixo.
+      const found =
+        inserted.rows[0] ??
+        (
+          await client.query<{ id: string }>('SELECT id FROM products WHERE slug = $1 FOR UPDATE', [
+            item.slug,
+          ])
+        ).rows[0];
+      const productId = found!.id;
 
       const existing = await client.query(
         'SELECT 1 FROM stock_movements WHERE product_id = $1 LIMIT 1',

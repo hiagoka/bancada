@@ -5,6 +5,8 @@ import type { Logger } from 'pino';
 import { stdSerializers } from 'pino';
 import { pinoHttp } from 'pino-http';
 import { AppError } from './shared/errors.js';
+import { createProductsRouter } from './modules/products/products.routes.js';
+import type { StorageService } from './modules/storage/storage.service.js';
 import { errorHandler, notFoundHandler } from './shared/http.js';
 
 function omitKeys<T extends object>(obj: T, keys: string[]): Partial<T> {
@@ -17,9 +19,10 @@ export interface AppDeps {
   pool: Pool;
   logger: Logger;
   webUrl: string;
+  storage: StorageService;
 }
 
-export function createApp({ pool, logger, webUrl }: AppDeps): Express {
+export function createApp({ pool, logger, webUrl, storage }: AppDeps): Express {
   const app = express();
 
   app.disable('x-powered-by');
@@ -60,6 +63,8 @@ export function createApp({ pool, logger, webUrl }: AppDeps): Express {
     }
     res.json({ data: { status: 'ok' } });
   });
+
+  app.use(createProductsRouter({ pool, storage }));
 
   app.use(notFoundHandler);
   app.use(errorHandler(logger));

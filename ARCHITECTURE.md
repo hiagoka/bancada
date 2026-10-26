@@ -63,7 +63,7 @@ Pastas:
   src/config/env.ts           valida process.env com Zod e falha cedo
   src/db/pool.ts              createPool() e withTransaction(pool, fn)
   src/db/migrate.ts           aplica migrations/*.sql em ordem (tabela schema_migrations)
-  src/db/seed.ts              6 produtos de exemplo via applyStockMovement 'initial' (upsert por slug; um deles com estoque 3)
+  src/db/seed.ts              6 produtos de exemplo via applyStockMovement 'initial' (cria só o que falta por slug e nunca sobrescreve produto existente, D17; um deles com estoque 3)
   src/db/migrations/001_init.sql
   src/modules/products/       products.routes.ts (público), products.repository.ts
   src/modules/stock/          stock.repository.ts (applyStockMovement, listMovements)
@@ -345,6 +345,7 @@ D13 Estorno não devolve estoque: é devolução de dinheiro, não de mercadoria
 D14 Pedido abandonado: a Preference expira no MP em 30 min (expires + expiration_date_to) e o admin pode cancelar manualmente pedido PENDING com mais de 30 min, devolvendo o estoque. Expiração automática por job fica como próximo passo.
 D15 CSRF: mutações em /auth/* e /admin/* exigem X-Requested-With: bancada-web e Content-Type: application/json (403 CSRF_REJECTED), somado ao CORS restrito a WEB_URL. Deploy preferencialmente no mesmo site para manter SameSite=Lax.
 D16 imageKey no PATCH: ausente mantém, null remove, string troca. Arquivos antigos no S3 não são apagados (órfãos); limpeza é próximo passo.
+D17 Seed nunca sobrescreve produtos existentes (ON CONFLICT DO NOTHING): rodar de novo não desfaz edições feitas pelo admin.
 Mudança de arquitetura só registrando uma nova decisão aqui.
 
 ========================================

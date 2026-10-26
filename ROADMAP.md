@@ -10,7 +10,7 @@ Uma tarefa por vez (api e web podem andar em paralelo quando não dependem uma d
 ## Fase 1 · API base
 - [x] **T04** [api] Esqueleto: env, pool, errors, http, createApp, server, /health. Aceite: /health 200; env inválida derruba o processo com mensagem clara.
 - [x] **T05** [api] Migração 001 completa (seção 6), runner de migrações, stock.repository (applyStockMovement), seed e setup de testes. Aceite: migrate idempotente; seed gera movimentos 'initial'; build copia os .sql sem comandos Unix.
-- [ ] **T06** [api] Produtos públicos: GET /products e /products/:id com imageUrl. Aceite: testes de listagem, inativo e 404.
+- [x] **T06** [api] Produtos públicos: GET /products e /products/:id com imageUrl. Aceite: testes de listagem, inativo e 404.
 
 ## Fase 2 · Pedidos e pagamento
 - [ ] **T07** [api] Criar pedido (fluxo 8.1, sem gateway ainda) e GET /orders/:id público (publicOrderSchema). Aceite: testes de pedido, idempotência, estoque, movimentos, concorrência e "resposta pública não contém customer".

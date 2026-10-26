@@ -43,13 +43,27 @@ export async function createScratchDb(): Promise<ScratchDb> {
 
 export async function insertProduct(
   pool: Pool,
-  overrides: { slug?: string; stock?: number; priceCents?: number } = {},
+  overrides: {
+    slug?: string;
+    name?: string;
+    stock?: number;
+    priceCents?: number;
+    active?: boolean;
+    imageKey?: string | null;
+  } = {},
 ): Promise<string> {
   const slug = overrides.slug ?? `produto-${randomUUID()}`;
   const { rows } = await pool.query<{ id: string }>(
-    `INSERT INTO products (slug, name, description, category, price_cents, stock)
-     VALUES ($1, 'Produto', 'Descrição', 'teste', $2, $3) RETURNING id`,
-    [slug, overrides.priceCents ?? 1000, overrides.stock ?? 0],
+    `INSERT INTO products (slug, name, description, category, price_cents, stock, active, image_key)
+     VALUES ($1, $2, 'Descrição', 'teste', $3, $4, $5, $6) RETURNING id`,
+    [
+      slug,
+      overrides.name ?? 'Produto',
+      overrides.priceCents ?? 1000,
+      overrides.stock ?? 0,
+      overrides.active ?? true,
+      overrides.imageKey ?? null,
+    ],
   );
   return rows[0]!.id;
 }
