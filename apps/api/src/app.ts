@@ -5,6 +5,8 @@ import type { Logger } from 'pino';
 import { stdSerializers } from 'pino';
 import { pinoHttp } from 'pino-http';
 import { AppError } from './shared/errors.js';
+import { createOrdersRouter } from './modules/orders/orders.routes.js';
+import { OrdersService } from './modules/orders/orders.service.js';
 import { createProductsRouter } from './modules/products/products.routes.js';
 import type { StorageService } from './modules/storage/storage.service.js';
 import { errorHandler, notFoundHandler } from './shared/http.js';
@@ -20,9 +22,11 @@ export interface AppDeps {
   logger: Logger;
   webUrl: string;
   storage: StorageService;
+  // 'fake' | 'mercadopago'; a T08 troca por um gateway.
+  paymentProvider: string;
 }
 
-export function createApp({ pool, logger, webUrl, storage }: AppDeps): Express {
+export function createApp({ pool, logger, webUrl, storage, paymentProvider }: AppDeps): Express {
   const app = express();
 
   app.disable('x-powered-by');
@@ -65,6 +69,7 @@ export function createApp({ pool, logger, webUrl, storage }: AppDeps): Express {
   });
 
   app.use(createProductsRouter({ pool, storage }));
+  app.use(createOrdersRouter({ ordersService: new OrdersService({ pool, paymentProvider }) }));
 
   app.use(notFoundHandler);
   app.use(errorHandler(logger));

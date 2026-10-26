@@ -136,6 +136,28 @@ describe('errorHandler', () => {
     expect(logger.error).toHaveBeenCalledTimes(1);
   });
 
+  it('erro do pg: o log não leva detail/where (podem conter dados do cliente)', async () => {
+    const logger = { error: jest.fn() };
+    const app = express();
+    app.get('/pg', () => {
+      throw Object.assign(new Error('violates check constraint'), {
+        severity: 'ERROR',
+        code: '23514',
+        constraint: 'orders_total_positive',
+        detail: 'Failing row contains (Ana Souza, ana@example.com)',
+        where: 'Ana Souza',
+      });
+    });
+    app.use(errorHandler(logger as never));
+    const res = await request(app).get('/pg');
+    expect(res.status).toBe(500);
+    const logged = JSON.stringify(logger.error.mock.calls[0][0]);
+    expect(logged).toContain('23514');
+    expect(logged).toContain('orders_total_positive');
+    expect(logged).not.toContain('Ana Souza');
+    expect(logged).not.toContain('ana@example.com');
+  });
+
   it('rota desconhecida: 404 NOT_FOUND no envelope', async () => {
     const res = await request(buildApp()).get('/nao-existe');
     expect(res.status).toBe(404);

@@ -160,6 +160,7 @@ Respostas de produto incluem imageUrl = S3_PUBLIC_URL/<image_key> (ou null). O b
  1. Normalizar itens: somar produtos repetidos e ordenar por productId. request_hash = sha256(customer + itens).
  2. Se a Idempotency-Key já existe: com o mesmo hash, devolver o pedido existente (200) e refazer o checkout se ele não tiver checkout_url; com hash diferente, 409 IDEMPOTENCY_KEY_REUSED.
  3. BEGIN; SELECT ... FROM products WHERE id = ANY($1) AND active ORDER BY id FOR UPDATE (a ordem por id evita deadlock).
+ 3b. Logo após os locks e ANTES de validar o estoque, reconsultar a Idempotency-Key dentro da transação (D18): se já existir, ROLLBACK e responder replay (200) ou 409 IDEMPOTENCY_KEY_REUSED.
  4. Validar existência/ativo (422) e estoque (409 com details: [{ productId, requested, available }]).
  5. Total calculado com o PREÇO DO BANCO; preço enviado pelo cliente é ignorado.
  6. INSERT ... ON CONFLICT (idempotency_key) DO NOTHING RETURNING id. Se não voltar linha, outra requisição ganhou a corrida: ROLLBACK e devolver o pedido dela.
@@ -346,6 +347,7 @@ D14 Pedido abandonado: a Preference expira no MP em 30 min (expires + expiration
 D15 CSRF: mutações em /auth/* e /admin/* exigem X-Requested-With: bancada-web e Content-Type: application/json (403 CSRF_REJECTED), somado ao CORS restrito a WEB_URL. Deploy preferencialmente no mesmo site para manter SameSite=Lax.
 D16 imageKey no PATCH: ausente mantém, null remove, string troca. Arquivos antigos no S3 não são apagados (órfãos); limpeza é próximo passo.
 D17 Seed nunca sobrescreve produtos existentes (ON CONFLICT DO NOTHING): rodar de novo não desfaz edições feitas pelo admin.
+D18 Reconsulta da Idempotency-Key depois dos locks (8.1, passo 3b): sem isso, uma requisição repetida simultânea veria o estoque já reservado pela primeira e responderia OUT_OF_STOCK em vez de replay. Toda devolução de estoque (webhook CANCELLED, cancelamento manual) aplica os itens em ordem de productId, a mesma dos locks, para não dar deadlock com a criação de pedido.
 Mudança de arquitetura só registrando uma nova decisão aqui.
 
 ========================================

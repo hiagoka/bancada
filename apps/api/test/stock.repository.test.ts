@@ -109,13 +109,46 @@ describe('applyStockMovement', () => {
     expect(error).toMatchObject({ status: 404, code: 'NOT_FOUND' });
   });
 
-  it('delta 0 é rejeitado pelo banco e nada muda', async () => {
+  it.each([0, 1.5, Number.NaN, Number.POSITIVE_INFINITY, 3_000_000_000])(
+    'delta inválido (%p): AppError 400 VALIDATION_ERROR antes da query e nada muda',
+    async (delta) => {
+      const productId = await insertProduct(pool, { stock: 4 });
+      const error = await applyStockMovement(pool, {
+        productId,
+        delta,
+        reason: 'adjustment',
+      }).catch((err: unknown) => err);
+      expect(error).toBeInstanceOf(AppError);
+      expect(error).toMatchObject({ status: 400, code: 'VALIDATION_ERROR' });
+      expect(await stockOf(productId)).toBe(4);
+      expect(await countMovements(productId)).toBe(0);
+    },
+  );
+
+  it.each(['abc', '', '123'])(
+    'productId que não é UUID (%p): AppError 400, não erro cru do pg',
+    async (productId) => {
+      const error = await applyStockMovement(pool, {
+        productId,
+        delta: 1,
+        reason: 'restock',
+      }).catch((err: unknown) => err);
+      expect(error).toBeInstanceOf(AppError);
+      expect(error).toMatchObject({ status: 400, code: 'VALIDATION_ERROR' });
+    },
+  );
+
+  it('orderId e adminId que não são UUID também dão AppError 400', async () => {
     const productId = await insertProduct(pool, { stock: 4 });
-    await expect(
-      applyStockMovement(pool, { productId, delta: 0, reason: 'adjustment' }),
-    ).rejects.toThrow();
-    expect(await stockOf(productId)).toBe(4);
-    expect(await countMovements(productId)).toBe(0);
+    for (const extra of [{ orderId: 'x' }, { adminId: 'y' }]) {
+      const error = await applyStockMovement(pool, {
+        productId,
+        delta: 1,
+        reason: 'restock',
+        ...extra,
+      }).catch((err: unknown) => err);
+      expect(error).toMatchObject({ status: 400, code: 'VALIDATION_ERROR' });
+    }
   });
 
   it('participa da transação do chamador: ROLLBACK desfaz estoque e movimento', async () => {

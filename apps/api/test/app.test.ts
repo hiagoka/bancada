@@ -7,7 +7,13 @@ import { silentLogger, testDatabaseUrl } from './helpers.js';
 
 const webUrl = 'http://localhost:5173';
 const pool = createPool(testDatabaseUrl());
-const app = createApp({ pool, logger: silentLogger, webUrl, storage: new FakeStorageService() });
+const app = createApp({
+  pool,
+  logger: silentLogger,
+  webUrl,
+  storage: new FakeStorageService(),
+  paymentProvider: 'fake',
+});
 
 afterAll(async () => {
   await pool.end();
@@ -29,6 +35,7 @@ describe('GET /health', () => {
           logger: silentLogger,
           webUrl,
           storage: new FakeStorageService(),
+          paymentProvider: 'fake',
         }),
       ).get('/health');
       expect(res.status).toBe(500);
@@ -44,7 +51,13 @@ describe('logs de requisição', () => {
     const lines: string[] = [];
     const stream = { write: (line: string): void => void lines.push(line) };
     const logger = pino({ level: 'info' }, stream);
-    const loggingApp = createApp({ pool, logger, webUrl, storage: new FakeStorageService() });
+    const loggingApp = createApp({
+      pool,
+      logger,
+      webUrl,
+      storage: new FakeStorageService(),
+      paymentProvider: 'fake',
+    });
 
     await request(loggingApp)
       .get('/health')

@@ -25,7 +25,13 @@ pool.on('error', (err) => logger.error({ err }, 'Erro em conexão ociosa do pool
 
 // Padrão = MinIO local (ver .env.example). A T12 troca por um S3StorageService completo.
 const storage = new PublicUrlStorageService(env.S3_PUBLIC_URL ?? 'http://localhost:9000/bancada');
-const app = createApp({ pool, logger, webUrl: env.WEB_URL, storage });
+const app = createApp({
+  pool,
+  logger,
+  webUrl: env.WEB_URL,
+  storage,
+  paymentProvider: env.PAYMENT_PROVIDER,
+});
 const server = app.listen(env.PORT, (err?: Error) => {
   if (err) {
     logger.fatal({ err, port: env.PORT }, 'Não foi possível abrir a porta');

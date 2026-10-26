@@ -13,6 +13,7 @@ const app = createApp({
   logger: silentLogger,
   webUrl: 'http://localhost:5173',
   storage: new FakeStorageService(),
+  paymentProvider: 'fake',
 });
 
 beforeEach(async () => {
@@ -127,6 +128,7 @@ describe('GET /products', () => {
           logger: silentLogger,
           webUrl: 'http://localhost:5173',
           storage: new FakeStorageService(),
+          paymentProvider: 'fake',
         }),
       ).get('/products');
       expect(res.status).toBe(500);

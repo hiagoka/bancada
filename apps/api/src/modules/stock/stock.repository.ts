@@ -1,4 +1,5 @@
-import type { StockMovement, StockMovementReason } from '@bancada/contracts';
+import { MAX_INT4, type StockMovement, type StockMovementReason } from '@bancada/contracts';
+import { z } from 'zod';
 import type { Db } from '../../db/pool.js';
 import { AppError } from '../../shared/errors.js';
 
@@ -63,12 +64,40 @@ function isStockConstraintViolation(err: unknown): boolean {
   );
 }
 
+// Mesmo formato que o Postgres aceita em colunas uuid (8-4-4-4-12 hex).
+const uuidSchema = z.guid();
+const deltaSchema = z.number().int().min(-MAX_INT4).max(MAX_INT4);
+
+function validateInput(input: StockMovementInput): void {
+  const problems: { path: string; message: string }[] = [];
+  if (!uuidSchema.safeParse(input.productId).success) {
+    problems.push({ path: 'productId', message: 'O produto informado é inválido' });
+  }
+  if (!deltaSchema.safeParse(input.delta).success || input.delta === 0) {
+    problems.push({
+      path: 'delta',
+      message: 'A quantidade do movimento deve ser um inteiro diferente de zero',
+    });
+  }
+  if (input.orderId !== undefined && !uuidSchema.safeParse(input.orderId).success) {
+    problems.push({ path: 'orderId', message: 'O pedido informado é inválido' });
+  }
+  if (input.adminId !== undefined && !uuidSchema.safeParse(input.adminId).success) {
+    problems.push({ path: 'adminId', message: 'O administrador informado é inválido' });
+  }
+  if (problems.length > 0) {
+    throw new AppError(400, 'VALIDATION_ERROR', 'Dados inválidos', problems);
+  }
+}
+
 // ÚNICO ponto que altera products.stock. UPDATE + INSERT num só statement: é atômico
 // mesmo com um Pool, e dentro da transação do chamador quando recebe um PoolClient.
 export async function applyStockMovement(
   db: Db,
-  { productId, delta, reason, orderId, adminId, note }: StockMovementInput,
+  input: StockMovementInput,
 ): Promise<StockMovement> {
+  validateInput(input);
+  const { productId, delta, reason, orderId, adminId, note } = input;
   try {
     const { rows } = await db.query<StockMovementRow>(
       `WITH updated AS (

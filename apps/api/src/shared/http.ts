@@ -39,6 +39,22 @@ function hasClientStatus(err: unknown): boolean {
   );
 }
 
+// Erros do pg trazem `detail`/`where` com valores da linha ("Failing row contains (...)"), que
+// podem incluir nome e e-mail do cliente: para eles só vão ao log code, constraint e message.
+function sanitizeError(err: unknown): unknown {
+  if (err instanceof Error && 'code' in err && 'severity' in err) {
+    const pgErr = err as Error & { code?: unknown; constraint?: unknown };
+    return {
+      type: err.name,
+      message: err.message,
+      code: pgErr.code,
+      constraint: pgErr.constraint,
+      stack: err.stack,
+    };
+  }
+  return err;
+}
+
 export function errorHandler(logger: Logger): ErrorRequestHandler {
   // Express identifica o handler de erro pela aridade (4 parâmetros).
   return (err, _req, res, next) => {
@@ -67,7 +83,7 @@ export function errorHandler(logger: Logger): ErrorRequestHandler {
       res.status(400).json(errorBody('VALIDATION_ERROR', 'Requisição inválida'));
       return;
     }
-    logger.error({ err }, 'Erro inesperado');
+    logger.error({ err: sanitizeError(err) }, 'Erro inesperado');
     res.status(500).json(errorBody('INTERNAL_ERROR', 'Erro interno do servidor'));
   };
 }
