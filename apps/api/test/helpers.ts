@@ -17,3 +17,10 @@ export const validEnv = {
   DATABASE_URL: 'postgres://bancada:bancada@localhost:5432/bancada',
   JWT_SECRET: 'x'.repeat(32),
 };
+
+// Dependências de autenticação do createApp nos testes (custo 4 do bcrypt: rápido).
+export const authDeps = {
+  jwtSecret: 'segredo-de-teste-com-mais-de-32-caracteres',
+  cookieSameSite: 'lax' as const,
+  bcryptCost: 4,
+};

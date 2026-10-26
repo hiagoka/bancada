@@ -23,6 +23,23 @@ const envObject = z.object({
     .min(32, { error: 'deve ter no mínimo 32 caracteres' }),
   COOKIE_SAMESITE: z.enum(['lax', 'none'], { error: 'deve ser "lax" ou "none"' }).default('lax'),
   NODE_ENV: optionalString,
+  // Custo do bcrypt (12 em produção; os testes usam 4).
+  BCRYPT_COST: z.coerce
+    .number({ error: 'deve ser um número' })
+    .int({ error: 'deve ser um número inteiro' })
+    .min(4, { error: 'deve estar entre 4 e 15' })
+    .max(15, { error: 'deve estar entre 4 e 15' })
+    .default(12),
+  // Atrás de proxy/load balancer: "true", número de proxies ou lista de redes (ex.: "loopback").
+  // Com "false" (padrão) o IP do rate limit é o da conexão direta.
+  TRUST_PROXY: z
+    .string()
+    .default('false')
+    .transform((v): boolean | number | string => {
+      if (v === 'true') return true;
+      if (v === 'false') return false;
+      return /^\d+$/.test(v) ? Number(v) : v;
+    }),
   // Libera PAYMENT_PROVIDER=fake em produção (pagamentos simulados, de propósito).
   ALLOW_FAKE_PAYMENTS: z
     .enum(['true', 'false'], { error: 'deve ser "true" ou "false"' })

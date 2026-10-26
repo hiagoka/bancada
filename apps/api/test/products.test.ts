@@ -6,10 +6,11 @@ import { FakePaymentGateway } from '../src/modules/payments/fake.gateway.js';
 import { FakeStorageService } from '../src/modules/storage/fake.storage.js';
 import { applyStockMovement } from '../src/modules/stock/stock.repository.js';
 import { insertProduct, resetDb } from './db-helpers.js';
-import { silentLogger, testDatabaseUrl } from './helpers.js';
+import { silentLogger, testDatabaseUrl, authDeps } from './helpers.js';
 
 const pool = createPool(testDatabaseUrl());
 const app = createApp({
+  ...authDeps,
   pool,
   logger: silentLogger,
   webUrl: 'http://localhost:5173',
@@ -125,6 +126,7 @@ describe('GET /products', () => {
     try {
       const res = await request(
         createApp({
+          ...authDeps,
           pool: broken,
           logger: silentLogger,
           webUrl: 'http://localhost:5173',

@@ -4,11 +4,12 @@ import { createApp } from '../src/app.js';
 import { createPool } from '../src/db/pool.js';
 import { FakePaymentGateway } from '../src/modules/payments/fake.gateway.js';
 import { FakeStorageService } from '../src/modules/storage/fake.storage.js';
-import { silentLogger, testDatabaseUrl } from './helpers.js';
+import { silentLogger, testDatabaseUrl, authDeps } from './helpers.js';
 
 const webUrl = 'http://localhost:5173';
 const pool = createPool(testDatabaseUrl());
 const app = createApp({
+  ...authDeps,
   pool,
   logger: silentLogger,
   webUrl,
@@ -32,6 +33,7 @@ describe('GET /health', () => {
     try {
       const res = await request(
         createApp({
+          ...authDeps,
           pool: broken,
           logger: silentLogger,
           webUrl,
@@ -53,6 +55,7 @@ describe('logs de requisição', () => {
     const stream = { write: (line: string): void => void lines.push(line) };
     const logger = pino({ level: 'info' }, stream);
     const loggingApp = createApp({
+      ...authDeps,
       pool,
       logger,
       webUrl,

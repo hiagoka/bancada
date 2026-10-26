@@ -6,12 +6,13 @@ import { FakePaymentGateway } from '../src/modules/payments/fake.gateway.js';
 import type { PaymentGateway } from '../src/modules/payments/payment-gateway.js';
 import { FakeStorageService } from '../src/modules/storage/fake.storage.js';
 import { resetDb } from './db-helpers.js';
-import { silentLogger, testDatabaseUrl } from './helpers.js';
+import { silentLogger, testDatabaseUrl, authDeps } from './helpers.js';
 
 const pool = createPool(testDatabaseUrl());
 const webUrl = 'http://localhost:5173';
 const gateway = new FakePaymentGateway({ webUrl });
 const app = createApp({
+  ...authDeps,
   pool,
   logger: silentLogger,
   webUrl,
@@ -124,6 +125,7 @@ describe('POST /dev/payments/simulate (gateway fake)', () => {
       getPayment: (id) => gateway.getPayment(id),
     };
     const mpApp = createApp({
+      ...authDeps,
       pool,
       logger: silentLogger,
       webUrl,

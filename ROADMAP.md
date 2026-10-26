@@ -18,7 +18,7 @@ Uma tarefa por vez (api e web podem andar em paralelo quando não dependem uma d
 - [x] **T09** [api] Webhook, máquina de estados e /dev/payments/simulate. Aceite: todos os testes de webhook.
 
 ## Fase 3 · Administração (API)
-- [ ] **T10** [api] Autenticação (8.5): login, logout, me, requireAdmin, rate limit, proteção CSRF (requireCsrfHeader, D15), script create-admin. Aceite: testes de auth e "POST em rota admin com cookie válido e sem o header dá 403".
+- [x] **T10** [api] Autenticação (8.5): login, logout, me, requireAdmin, rate limit, proteção CSRF (requireCsrfHeader, D15), script create-admin. Aceite: testes de auth e "POST em rota admin com cookie válido e sem o header dá 403".
 - [ ] **T11** [api] Produtos e estoque do admin (8.6) + lista de pedidos + POST /admin/orders/:id/cancel (8.8). Aceite: testes de produto, slug, ajuste, desativação, imageKey (ausente/null/string), concorrência admin x pedidos, cancelamento (antes de 30 min: 409; depois: cancela e devolve estoque; PAID: 409) e estorno sem mexer no estoque.
 - [ ] **T12** [api] StorageService + rota de upload (8.7). Aceite: testes de upload; upload real funcionando no MinIO local.
 

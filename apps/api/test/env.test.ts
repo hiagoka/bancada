@@ -119,6 +119,26 @@ describe('parseEnv', () => {
     });
   });
 
+  describe('BCRYPT_COST e TRUST_PROXY', () => {
+    it('BCRYPT_COST padrão 12; aceita 4 a 15; rejeita fora disso', () => {
+      expect(parseEnv(validEnv).BCRYPT_COST).toBe(12);
+      expect(parseEnv({ ...validEnv, BCRYPT_COST: '4' }).BCRYPT_COST).toBe(4);
+      for (const bad of ['3', '16', 'abc', '10.5']) {
+        expect(failure({ ...validEnv, BCRYPT_COST: bad }).issues[0]?.variable).toBe('BCRYPT_COST');
+      }
+    });
+
+    it('TRUST_PROXY: padrão false; true/false/número/lista de redes', () => {
+      expect(parseEnv(validEnv).TRUST_PROXY).toBe(false);
+      expect(parseEnv({ ...validEnv, TRUST_PROXY: 'true' }).TRUST_PROXY).toBe(true);
+      expect(parseEnv({ ...validEnv, TRUST_PROXY: 'false' }).TRUST_PROXY).toBe(false);
+      expect(parseEnv({ ...validEnv, TRUST_PROXY: '1' }).TRUST_PROXY).toBe(1);
+      expect(parseEnv({ ...validEnv, TRUST_PROXY: 'loopback, 10.0.0.0/8' }).TRUST_PROXY).toBe(
+        'loopback, 10.0.0.0/8',
+      );
+    });
+  });
+
   it('rejeita PAYMENT_PROVIDER desconhecido', () => {
     expect(failure({ ...validEnv, PAYMENT_PROVIDER: 'paypal' }).issues[0]?.variable).toBe(
       'PAYMENT_PROVIDER',

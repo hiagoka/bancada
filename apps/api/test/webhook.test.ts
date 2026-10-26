@@ -8,7 +8,7 @@ import { FakePaymentGateway } from '../src/modules/payments/fake.gateway.js';
 import type { PaymentStatus } from '../src/modules/payments/payment-gateway.js';
 import { FakeStorageService } from '../src/modules/storage/fake.storage.js';
 import { resetDb } from './db-helpers.js';
-import { silentLogger, testDatabaseUrl } from './helpers.js';
+import { silentLogger, testDatabaseUrl, authDeps } from './helpers.js';
 import { WEBHOOK_SECRET, notify, sign } from './webhook-helpers.js';
 
 const pool = createPool(testDatabaseUrl());
@@ -18,6 +18,7 @@ let app: Express;
 
 function buildApp(logger = silentLogger, secret: string | null = WEBHOOK_SECRET): Express {
   return createApp({
+    ...authDeps,
     pool,
     logger,
     webUrl,

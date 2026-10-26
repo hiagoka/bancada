@@ -5,7 +5,7 @@ import { createPool } from '../src/db/pool.js';
 import { FakePaymentGateway } from '../src/modules/payments/fake.gateway.js';
 import { FakeStorageService } from '../src/modules/storage/fake.storage.js';
 import { resetDb } from './db-helpers.js';
-import { silentLogger, testDatabaseUrl } from './helpers.js';
+import { silentLogger, testDatabaseUrl, authDeps } from './helpers.js';
 
 const pool = createPool(testDatabaseUrl());
 const webUrl = 'http://localhost:5173';
@@ -18,6 +18,7 @@ beforeEach(async () => {
   gateway = new FakePaymentGateway({ webUrl });
   clock = null;
   app = createApp({
+    ...authDeps,
     pool,
     logger: silentLogger,
     webUrl,
@@ -96,6 +97,7 @@ describe('checkout depois do COMMIT', () => {
   it('a chamada ao gateway acontece FORA da transação (nenhum lock segurado durante o checkout)', async () => {
     const slow = new FakePaymentGateway({ webUrl, delayMs: 300 });
     const slowApp = createApp({
+      ...authDeps,
       pool,
       logger: silentLogger,
       webUrl,
@@ -213,6 +215,7 @@ describe('corrida na gravação do checkout', () => {
       }
     }
     const racingApp = createApp({
+      ...authDeps,
       pool,
       logger: silentLogger,
       webUrl,
@@ -261,6 +264,7 @@ describe('replay e checkout', () => {
   it('retries simultâneos não geram dois checkouts diferentes', async () => {
     const slow = new FakePaymentGateway({ webUrl, delayMs: 80 });
     const slowApp = createApp({
+      ...authDeps,
       pool,
       logger: silentLogger,
       webUrl,

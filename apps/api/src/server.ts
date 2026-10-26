@@ -42,12 +42,23 @@ if (env.PAYMENT_PROVIDER === 'fake' && env.NODE_ENV === 'production') {
   );
 }
 
+if (env.NODE_ENV === 'production' && env.TRUST_PROXY === false) {
+  logger.warn(
+    'TRUST_PROXY=false em produção: atrás de proxy/load balancer todos os clientes compartilham o IP do proxy no rate limit do login (defina TRUST_PROXY=1)',
+  );
+}
+
 const app = createApp({
   pool,
   logger,
   webUrl: env.WEB_URL,
   storage,
   gateway,
+  jwtSecret: env.JWT_SECRET,
+  cookieSameSite: env.COOKIE_SAMESITE,
+  secureCookies: env.NODE_ENV === 'production',
+  bcryptCost: env.BCRYPT_COST,
+  trustProxy: env.TRUST_PROXY,
   webhookSecret: env.PAYMENT_PROVIDER === 'mercadopago' ? env.MP_WEBHOOK_SECRET : undefined,
 });
 const server = app.listen(env.PORT, (err?: Error) => {

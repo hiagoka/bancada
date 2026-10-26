@@ -1,3 +1,4 @@
+import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express, { type Express } from 'express';
 import type { Pool } from 'pg';
@@ -5,6 +6,9 @@ import type { Logger } from 'pino';
 import { stdSerializers } from 'pino';
 import { pinoHttp } from 'pino-http';
 import { AppError } from './shared/errors.js';
+import { createAuthRouter, type LoginRateLimit } from './modules/auth/auth.routes.js';
+import { AuthService, BCRYPT_COST_PRODUCTION } from './modules/auth/auth.service.js';
+import { createRequireAdmin } from './modules/auth/require-admin.js';
 import { createOrdersRouter } from './modules/orders/orders.routes.js';
 import { OrdersService } from './modules/orders/orders.service.js';
 import { createProductsRouter } from './modules/products/products.routes.js';
@@ -13,6 +17,7 @@ import { PaymentWebhookService } from './modules/payments/payment-webhook.servic
 import { createPaymentsRouter } from './modules/payments/payments.routes.js';
 import type { PaymentGateway } from './modules/payments/payment-gateway.js';
 import type { StorageService } from './modules/storage/storage.service.js';
+import { requireCsrfHeader } from './shared/csrf.js';
 import { errorHandler, notFoundHandler } from './shared/http.js';
 
 function omitKeys<T extends object>(obj: T, keys: string[]): Partial<T> {
@@ -29,6 +34,15 @@ export interface AppDeps {
   gateway: PaymentGateway;
   // Segredo do webhook do Mercado Pago; sem ele a rota /webhooks/mercadopago não é montada.
   webhookSecret?: string;
+  jwtSecret: string;
+  cookieSameSite: 'lax' | 'none';
+  // Cookie Secure (produção). Com cookieSameSite='none' é sempre Secure.
+  secureCookies?: boolean;
+  // Custo do bcrypt (padrão 12; os testes usam 4).
+  bcryptCost?: number;
+  loginRateLimit?: LoginRateLimit;
+  // Valor de app.set('trust proxy'): necessário atrás de proxy para o rate limit ver o IP real.
+  trustProxy?: boolean | number | string;
   now?: () => Date;
 }
 
@@ -40,10 +54,17 @@ export function createApp({
   gateway,
   webhookSecret,
   now,
+  jwtSecret,
+  cookieSameSite,
+  secureCookies = false,
+  bcryptCost = BCRYPT_COST_PRODUCTION,
+  loginRateLimit,
+  trustProxy,
 }: AppDeps): Express {
   const app = express();
 
   app.disable('x-powered-by');
+  if (trustProxy !== undefined) app.set('trust proxy', trustProxy);
   app.use(
     pinoHttp({
       logger,
@@ -70,7 +91,18 @@ export function createApp({
       allowedHeaders: ['Content-Type', 'Idempotency-Key', 'X-Requested-With'],
     }),
   );
+  // CSRF (D15) ANTES do parser: um POST sem os cabeçalhos é recusado mesmo com JSON malformado.
+  app.use(['/auth', '/admin'], (_req, res, next) => {
+    // Sessão e dados de clientes nunca ficam em cache de navegador ou proxy.
+    res.set('Cache-Control', 'no-store');
+    next();
+  });
+  app.use(['/auth', '/admin'], requireCsrfHeader);
   app.use(express.json());
+  app.use(cookieParser());
+
+  const authService = new AuthService({ pool, jwtSecret, bcryptCost });
+  const requireAdmin = createRequireAdmin(authService);
 
   app.get('/health', async (req, res) => {
     try {
@@ -81,6 +113,20 @@ export function createApp({
     }
     res.json({ data: { status: 'ok' } });
   });
+
+  app.use(
+    '/auth',
+    createAuthRouter({
+      authService,
+      requireAdmin,
+      sameSite: cookieSameSite,
+      secure: secureCookies,
+      logger,
+      loginRateLimit,
+    }),
+  );
+  // Tudo em /admin exige admin logado. A T11 pendura as rotas aqui, depois deste middleware.
+  app.use('/admin', requireAdmin);
 
   app.use(createProductsRouter({ pool, storage }));
   app.use(createOrdersRouter({ ordersService: new OrdersService({ pool, gateway, logger, now }) }));
