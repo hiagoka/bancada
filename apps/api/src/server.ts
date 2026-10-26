@@ -2,6 +2,8 @@ import pino from 'pino';
 import { createApp } from './app.js';
 import { EnvError, loadEnv, type Env } from './config/env.js';
 import { createPool } from './db/pool.js';
+import { FakePaymentGateway } from './modules/payments/fake.gateway.js';
+import { createMercadoPagoGateway } from './modules/payments/mercadopago.gateway.js';
 import { PublicUrlStorageService } from './modules/storage/public-url.storage.js';
 
 const SHUTDOWN_TIMEOUT_MS = 10_000;
@@ -23,6 +25,15 @@ const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' });
 const pool = createPool(env.DATABASE_URL);
 pool.on('error', (err) => logger.error({ err }, 'Erro em conexão ociosa do pool'));
 
+const gateway =
+  env.PAYMENT_PROVIDER === 'mercadopago'
+    ? createMercadoPagoGateway({
+        accessToken: env.MP_ACCESS_TOKEN!,
+        webUrl: env.WEB_URL,
+        apiPublicUrl: env.API_PUBLIC_URL,
+      })
+    : new FakePaymentGateway({ webUrl: env.WEB_URL });
+
 // Padrão = MinIO local (ver .env.example). A T12 troca por um S3StorageService completo.
 const storage = new PublicUrlStorageService(env.S3_PUBLIC_URL ?? 'http://localhost:9000/bancada');
 const app = createApp({
@@ -30,7 +41,7 @@ const app = createApp({
   logger,
   webUrl: env.WEB_URL,
   storage,
-  paymentProvider: env.PAYMENT_PROVIDER,
+  gateway,
 });
 const server = app.listen(env.PORT, (err?: Error) => {
   if (err) {

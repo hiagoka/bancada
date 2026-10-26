@@ -177,3 +177,17 @@ export async function insertOrderItem(
     [orderId, item.productId, item.productName, item.unitPriceCents, item.quantity],
   );
 }
+
+// Só grava se ainda não houver checkout: se outra requisição chegou antes, a dela vale.
+export async function setCheckoutIfMissing(
+  db: Db,
+  orderId: string,
+  checkoutId: string,
+  checkoutUrl: string,
+): Promise<void> {
+  await db.query(
+    `UPDATE orders SET checkout_id = $2, checkout_url = $3, updated_at = now()
+     WHERE id = $1 AND checkout_url IS NULL`,
+    [orderId, checkoutId, checkoutUrl],
+  );
+}

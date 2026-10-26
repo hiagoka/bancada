@@ -2,6 +2,7 @@ import pino from 'pino';
 import request from 'supertest';
 import { createApp } from '../src/app.js';
 import { createPool } from '../src/db/pool.js';
+import { FakePaymentGateway } from '../src/modules/payments/fake.gateway.js';
 import { FakeStorageService } from '../src/modules/storage/fake.storage.js';
 import { silentLogger, testDatabaseUrl } from './helpers.js';
 
@@ -12,7 +13,7 @@ const app = createApp({
   logger: silentLogger,
   webUrl,
   storage: new FakeStorageService(),
-  paymentProvider: 'fake',
+  gateway: new FakePaymentGateway({ webUrl: 'http://localhost:5173' }),
 });
 
 afterAll(async () => {
@@ -35,7 +36,7 @@ describe('GET /health', () => {
           logger: silentLogger,
           webUrl,
           storage: new FakeStorageService(),
-          paymentProvider: 'fake',
+          gateway: new FakePaymentGateway({ webUrl: 'http://localhost:5173' }),
         }),
       ).get('/health');
       expect(res.status).toBe(500);
@@ -56,7 +57,7 @@ describe('logs de requisição', () => {
       logger,
       webUrl,
       storage: new FakeStorageService(),
-      paymentProvider: 'fake',
+      gateway: new FakePaymentGateway({ webUrl: 'http://localhost:5173' }),
     });
 
     await request(loggingApp)

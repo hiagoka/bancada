@@ -1,8 +1,10 @@
 import { createHash } from 'node:crypto';
 import { MAX_INT4, MAX_ORDER_ITEM_QUANTITY, type CreateOrderInput } from '@bancada/contracts';
 import type { Pool } from 'pg';
+import type { Logger } from 'pino';
 import { withTransaction } from '../../db/pool.js';
 import { AppError } from '../../shared/errors.js';
+import { GatewayError, type PaymentGateway } from '../payments/payment-gateway.js';
 import { InsufficientStockError, applyStockMovement } from '../stock/stock.repository.js';
 import {
   findOrderById,
@@ -10,15 +12,23 @@ import {
   insertOrder,
   insertOrderItem,
   lockActiveProducts,
+  setCheckoutIfMissing,
   type OrderItemRecord,
   type OrderWithItems,
 } from './orders.repository.js';
 
 export interface OrdersServiceDeps {
   pool: Pool;
-  // 'fake' | 'mercadopago'. A T08 troca isto pelo gateway (gateway.name).
-  paymentProvider: string;
+  gateway: PaymentGateway;
+  logger: Logger;
+  // Relógio injetável (testes).
+  now?: () => Date;
 }
+
+// A Preference expira 30 minutos depois da criação do pedido (D14). É a mesma janela do
+// cancelamento manual (8.8: created_at < agora - 30 min), então um pedido que o admin pode
+// cancelar nunca está mais pagável no provedor.
+const CHECKOUT_TTL_MS = 30 * 60 * 1000;
 
 export interface CreateOrderResult {
   order: OrderWithItems;
@@ -88,7 +98,10 @@ export class OrdersService {
     const requestHash = hashRequest(input.customer, items);
 
     const existing = await findOrderByIdempotencyKey(this.deps.pool, idempotencyKey);
-    if (existing) return { order: this.replayOf(existing, requestHash), created: false };
+    if (existing) {
+      const order = await this.ensureCheckout(this.replayOf(existing, requestHash));
+      return { order, created: false };
+    }
 
     try {
       const order = await withTransaction(this.deps.pool, async (client) => {
@@ -149,7 +162,7 @@ export class OrdersService {
           customerName: input.customer.name.trim(),
           customerEmail: input.customer.email.trim().toLowerCase(),
           totalCents,
-          paymentProvider: this.deps.paymentProvider,
+          paymentProvider: this.deps.gateway.name,
         });
         if (orderId === null) {
           // Rede de segurança: outra requisição gravou a chave entre a reconsulta e o INSERT.
@@ -192,12 +205,78 @@ export class OrdersService {
         if (!created) throw new Error('Pedido recém-criado não encontrado');
         return created;
       });
-      // FORA da transação, a T08 chamará gateway.createCheckout() e salvará checkout_id/url.
-      return { order, created: true };
+      // FORA da transação: um gateway lento não segura os locks dos produtos.
+      return { order: await this.ensureCheckout(order), created: true };
     } catch (err) {
-      if (err instanceof IdempotentReplay) return { order: err.order, created: false };
+      if (err instanceof IdempotentReplay) {
+        return { order: await this.ensureCheckout(err.order), created: false };
+      }
       throw err;
     }
+  }
+
+  // Passo 8: garante o checkout de um pedido PENDING. Pedido que já tem checkout, ou que não
+  // está mais PENDING, volta como está (o gateway não é chamado). Se o gateway falhar, o pedido
+  // e a reserva de estoque continuam salvos e o retry com a mesma chave conclui o checkout.
+  private async ensureCheckout(order: OrderWithItems): Promise<OrderWithItems> {
+    if (order.status !== 'PENDING' || order.checkoutUrl) return order;
+
+    const unavailable = (): AppError =>
+      new AppError(
+        502,
+        'CHECKOUT_UNAVAILABLE',
+        'Não foi possível iniciar o pagamento. Tente novamente com a mesma chave.',
+        { orderId: order.id },
+      );
+    // Retry com a mesma chave nunca mais funciona: o web precisa gerar uma chave nova.
+    const expired = (): AppError =>
+      new AppError(
+        502,
+        'CHECKOUT_UNAVAILABLE',
+        'O tempo para pagar este pedido acabou. Faça um novo pedido.',
+        { orderId: order.id, reason: 'expired' },
+      );
+
+    const expiresAt = new Date(order.createdAt.getTime() + CHECKOUT_TTL_MS);
+    const now = (this.deps.now ?? (() => new Date()))();
+    if (expiresAt.getTime() <= now.getTime()) {
+      this.deps.logger.warn({ orderId: order.id }, 'Checkout não refeito: pedido já expirou');
+      throw expired();
+    }
+
+    try {
+      const checkout = await this.deps.gateway.createCheckout({
+        orderId: order.id,
+        items: order.items.map((i) => ({
+          name: i.productName,
+          unitPriceCents: i.unitPriceCents,
+          quantity: i.quantity,
+        })),
+        totalCents: order.totalCents,
+        expiresAt,
+      });
+      await setCheckoutIfMissing(
+        this.deps.pool,
+        order.id,
+        checkout.checkoutId,
+        checkout.checkoutUrl,
+      );
+    } catch (err) {
+      // GatewayError já tem mensagem sem credenciais; qualquer outro erro (ex.: banco) é nosso
+      // e não carrega o token, então vai completo, com stack.
+      this.deps.logger.error(
+        {
+          orderId: order.id,
+          provider: this.deps.gateway.name,
+          ...(err instanceof GatewayError ? { reason: err.message } : { err }),
+        },
+        'Falha ao criar o checkout',
+      );
+      throw unavailable();
+    }
+
+    // Relê: se outra requisição gravou o checkout primeiro, vale o que está no banco.
+    return (await findOrderById(this.deps.pool, order.id)) ?? order;
   }
 
   // Mesma chave com o mesmo corpo = replay; com corpo diferente = conflito.

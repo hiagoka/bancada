@@ -193,7 +193,7 @@ Respostas de produto incluem imageUrl = S3_PUBLIC_URL/<image_key> (ou null). O b
    createCheckout(req) -> { checkoutId, checkoutUrl }
    getPayment(paymentId) -> { id, status, orderId, amountCents }
  }
- - MercadoPagoGateway: cria Preference com external_reference = orderId, itens em reais, currency_id BRL, expires: true e expiration_date_to = agora + 30 minutos (depois disso o MP não aceita mais pagamento do pedido; D14), requestOptions.idempotencyKey = "preference-<orderId>". Envia auto_return e notification_url só se as URLs forem HTTPS. back_urls apontam para WEB_URL/pedido/:id.
+ - MercadoPagoGateway: cria Preference com external_reference = orderId, itens em reais, currency_id BRL, expires: true e expiration_date_to = created_at do pedido + 30 minutos (D19; depois disso o MP não aceita mais pagamento do pedido; D14), requestOptions.idempotencyKey = "preference-<orderId>". Envia auto_return e notification_url só se as URLs forem HTTPS. back_urls apontam para WEB_URL/pedido/:id.
  - FakePaymentGateway: pagamentos num Map em memória; checkoutUrl = WEB_URL/checkout-simulado/:orderId; registerPayment() alimenta /dev/payments/simulate, que chama o MESMO handlePaymentNotification.
 
 8.5 Autenticação do admin
@@ -311,7 +311,7 @@ Admin
 - cancelar pedido antes de 30 min: 409 ORDER_NOT_CANCELLABLE; depois de 30 min: cancela e devolve o estoque (movimento 'order_cancelled' com admin_id); cancelar pedido PAID: 409
 - POST em rota /admin com cookie válido e sem o header X-Requested-With: 403 CSRF_REJECTED
 - GET /orders/:id (público) não contém customer (nem nome nem e-mail); GET /admin/orders contém
-- Preference criada com expires: true e expiration_date_to em 30 min (verificado no FakePaymentGateway/mock do SDK)
+- Preference criada com expires: true e expiration_date_to = created_at + 30 min (verificado no FakePaymentGateway/mock do SDK)
 - estorno não altera o estoque
 - produto desativado some do GET /products e novo pedido com ele dá 422
 - upload: tipo inválido dá 400 INVALID_FILE_TYPE; tipo válido devolve uploadUrl, fields e key
@@ -348,6 +348,7 @@ D15 CSRF: mutações em /auth/* e /admin/* exigem X-Requested-With: bancada-web 
 D16 imageKey no PATCH: ausente mantém, null remove, string troca. Arquivos antigos no S3 não são apagados (órfãos); limpeza é próximo passo.
 D17 Seed nunca sobrescreve produtos existentes (ON CONFLICT DO NOTHING): rodar de novo não desfaz edições feitas pelo admin.
 D18 Reconsulta da Idempotency-Key depois dos locks (8.1, passo 3b): sem isso, uma requisição repetida simultânea veria o estoque já reservado pela primeira e responderia OUT_OF_STOCK em vez de replay. Toda devolução de estoque (webhook CANCELLED, cancelamento manual) aplica os itens em ordem de productId, a mesma dos locks, para não dar deadlock com a criação de pedido.
+D19 A expiração da Preference é ancorada em orders.created_at + 30 min (não em "agora"): coincide com a janela do cancelamento manual (8.8), então um pedido nunca pode ser pago depois de cancelável. Retry do checkout depois dessa janela responde 502 CHECKOUT_UNAVAILABLE com details.reason = 'expired' (o web gera nova chave). Pagamento que chega depois do cancelamento cai em transição inválida: o pedido continua CANCELLED e o evento é gravado com log de alerta (T09).
 Mudança de arquitetura só registrando uma nova decisão aqui.
 
 ========================================
@@ -376,7 +377,7 @@ T06 [api] Produtos públicos: GET /products e /products/:id com imageUrl. Aceite
 
 Fase 2 · Pedidos e pagamento
 T07 [api] Criar pedido (fluxo 8.1, sem gateway ainda) e GET /orders/:id público (publicOrderSchema). Aceite: testes de pedido, idempotência, estoque, movimentos, concorrência e "resposta pública não contém customer".
-T08 [api] Gateway de pagamento (8.4), checkout fora da transação, Preference com expires: true e expiration_date_to = agora + 30 min. Aceite: teste de falha seguida de retry; teste da expiração da Preference.
+T08 [api] Gateway de pagamento (8.4), checkout fora da transação, Preference com expires: true e expiration_date_to = created_at do pedido + 30 min (D19). Aceite: teste de falha seguida de retry; teste da expiração da Preference.
 T09 [api] Webhook, máquina de estados e /dev/payments/simulate. Aceite: todos os testes de webhook.
 
 Fase 3 · Administração (API)

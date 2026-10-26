@@ -14,7 +14,7 @@ Uma tarefa por vez (api e web podem andar em paralelo quando não dependem uma d
 
 ## Fase 2 · Pedidos e pagamento
 - [x] **T07** [api] Criar pedido (fluxo 8.1, sem gateway ainda) e GET /orders/:id público (publicOrderSchema). Aceite: testes de pedido, idempotência, estoque, movimentos, concorrência e "resposta pública não contém customer".
-- [ ] **T08** [api] Gateway de pagamento (8.4), checkout fora da transação, Preference com expires: true e expiration_date_to = agora + 30 min. Aceite: teste de falha seguida de retry; teste da expiração da Preference.
+- [x] **T08** [api] Gateway de pagamento (8.4), checkout fora da transação, Preference com expires: true e expiration_date_to = created_at + 30 min (D19). Aceite: teste de falha seguida de retry; teste da expiração da Preference.
 - [ ] **T09** [api] Webhook, máquina de estados e /dev/payments/simulate. Aceite: todos os testes de webhook.
 
 ## Fase 3 · Administração (API)

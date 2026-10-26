@@ -2,6 +2,7 @@ import { productSchema } from '@bancada/contracts';
 import request from 'supertest';
 import { createApp } from '../src/app.js';
 import { createPool } from '../src/db/pool.js';
+import { FakePaymentGateway } from '../src/modules/payments/fake.gateway.js';
 import { FakeStorageService } from '../src/modules/storage/fake.storage.js';
 import { applyStockMovement } from '../src/modules/stock/stock.repository.js';
 import { insertProduct, resetDb } from './db-helpers.js';
@@ -13,7 +14,7 @@ const app = createApp({
   logger: silentLogger,
   webUrl: 'http://localhost:5173',
   storage: new FakeStorageService(),
-  paymentProvider: 'fake',
+  gateway: new FakePaymentGateway({ webUrl: 'http://localhost:5173' }),
 });
 
 beforeEach(async () => {
@@ -128,7 +129,7 @@ describe('GET /products', () => {
           logger: silentLogger,
           webUrl: 'http://localhost:5173',
           storage: new FakeStorageService(),
-          paymentProvider: 'fake',
+          gateway: new FakePaymentGateway({ webUrl: 'http://localhost:5173' }),
         }),
       ).get('/products');
       expect(res.status).toBe(500);

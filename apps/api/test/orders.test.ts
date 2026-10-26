@@ -3,17 +3,19 @@ import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { createApp } from '../src/app.js';
 import { createPool } from '../src/db/pool.js';
+import { FakePaymentGateway } from '../src/modules/payments/fake.gateway.js';
 import { FakeStorageService } from '../src/modules/storage/fake.storage.js';
 import { insertProduct, resetDb } from './db-helpers.js';
 import { silentLogger, testDatabaseUrl } from './helpers.js';
 
 const pool = createPool(testDatabaseUrl());
+const gateway = new FakePaymentGateway({ webUrl: 'http://localhost:5173' });
 const app = createApp({
   pool,
   logger: silentLogger,
   webUrl: 'http://localhost:5173',
   storage: new FakeStorageService(),
-  paymentProvider: 'fake',
+  gateway,
 });
 
 beforeEach(async () => {
@@ -73,7 +75,7 @@ async function expectNothingChanged(stocks: Record<string, number>): Promise<voi
 }
 
 describe('POST /orders: criação', () => {
-  it('201 com publicOrderSchema, status PENDING, sem checkout e sem dados do cliente', async () => {
+  it('201 com publicOrderSchema, status PENDING, com checkout e sem dados do cliente', async () => {
     const teclado = await idOf('teclado');
     const res = await post([{ productId: teclado, quantity: 2 }]);
     expect(res.status).toBe(201);
@@ -82,7 +84,6 @@ describe('POST /orders: criação', () => {
     expect(res.body.data).toMatchObject({
       status: 'PENDING',
       totalCents: 2 * 59900,
-      checkoutUrl: null,
       paidAt: null,
       items: [
         {
@@ -93,13 +94,16 @@ describe('POST /orders: criação', () => {
         },
       ],
     });
+    expect(res.body.data.checkoutUrl).toBe(
+      `http://localhost:5173/checkout-simulado/${res.body.data.id}`,
+    );
     const text = JSON.stringify(res.body);
     expect(text).not.toContain('Ana Souza');
     expect(text).not.toContain('ana@example.com');
     expect(res.body.data).not.toHaveProperty('customer');
   });
 
-  it('grava o pedido: cliente normalizado, provider, hash e checkout nulos', async () => {
+  it('grava o pedido: cliente normalizado, provider, hash e checkout', async () => {
     const key = randomUUID();
     await post([{ productId: await idOf('mouse'), quantity: 1 }], key, {
       customer: { name: 'Ana Souza', email: 'ANA@Example.COM' },
@@ -112,10 +116,10 @@ describe('POST /orders: criação', () => {
       customer_email: 'ana@example.com',
       status: 'PENDING',
       payment_provider: 'fake',
-      checkout_id: null,
-      checkout_url: null,
       paid_at: null,
     });
+    expect(rows[0].checkout_id).toBe(`fake-checkout-${rows[0].id}`);
+    expect(rows[0].checkout_url).toBe(`http://localhost:5173/checkout-simulado/${rows[0].id}`);
     expect(rows[0].request_hash).toMatch(/^[0-9a-f]{64}$/);
   });
 
