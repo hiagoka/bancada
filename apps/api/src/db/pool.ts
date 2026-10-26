@@ -14,6 +14,7 @@ export async function withTransaction<T>(
   // Erro de rede entre queries não pode derrubar o processo; a query seguinte falha e dispara o ROLLBACK.
   const onClientError = (): void => {};
   client.on('error', onClientError);
+  let discard = false;
   try {
     await client.query('BEGIN');
     const result = await fn(client);
@@ -23,11 +24,13 @@ export async function withTransaction<T>(
     try {
       await client.query('ROLLBACK');
     } catch {
-      // A conexão pode ter caído; o erro original é o que importa.
+      // O erro original é o que importa; mas a conexão fica suspeita (transação possivelmente
+      // aberta, segurando locks): ela é descartada em vez de voltar ao pool.
+      discard = true;
     }
     throw err;
   } finally {
     client.off('error', onClientError);
-    client.release();
+    client.release(discard);
   }
 }

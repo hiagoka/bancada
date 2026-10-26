@@ -1,3 +1,4 @@
+import pino from 'pino';
 import request from 'supertest';
 import { createApp } from '../src/app.js';
 import { createPool } from '../src/db/pool.js';
@@ -29,6 +30,25 @@ describe('GET /health', () => {
     } finally {
       await broken.end();
     }
+  });
+});
+
+describe('logs de requisição', () => {
+  it('não registram cookie, authorization nem set-cookie', async () => {
+    const lines: string[] = [];
+    const stream = { write: (line: string): void => void lines.push(line) };
+    const logger = pino({ level: 'info' }, stream);
+    const loggingApp = createApp({ pool, logger, webUrl });
+
+    await request(loggingApp)
+      .get('/health')
+      .set('Cookie', 'bancada_admin=jwt-secreto')
+      .set('Authorization', 'Bearer token-secreto');
+
+    const output = lines.join('\n');
+    expect(output).toContain('"url":"/health"');
+    expect(output).not.toContain('jwt-secreto');
+    expect(output).not.toContain('token-secreto');
   });
 });
 

@@ -7,11 +7,15 @@
   "main": "./dist/server.js",
   "scripts": {
     "dev": "tsx watch --env-file-if-exists=.env src/server.ts",
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && node scripts/copy-migrations.mjs",
     "start": "node --env-file-if-exists=.env dist/server.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "jest",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "postbuild": "node scripts/verify-build.mjs",
+    "migrate": "tsx --env-file-if-exists=.env src/db/migrate.cli.ts",
+    "seed": "tsx --env-file-if-exists=.env src/db/seed.cli.ts",
+    "migrate:prod": "node --env-file-if-exists=.env dist/db/migrate.cli.js"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",

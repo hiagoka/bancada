@@ -23,7 +23,11 @@ const pool = createPool(env.DATABASE_URL);
 pool.on('error', (err) => logger.error({ err }, 'Erro em conexão ociosa do pool'));
 
 const app = createApp({ pool, logger, webUrl: env.WEB_URL });
-const server = app.listen(env.PORT, () => {
+const server = app.listen(env.PORT, (err?: Error) => {
+  if (err) {
+    logger.fatal({ err, port: env.PORT }, 'Não foi possível abrir a porta');
+    process.exit(1);
+  }
   logger.info({ port: env.PORT }, 'API no ar');
 });
 

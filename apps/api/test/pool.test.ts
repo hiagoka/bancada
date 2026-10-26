@@ -14,6 +14,57 @@ afterAll(async () => {
 });
 
 describe('withTransaction', () => {
+  it('descarta a conexão (release(true)) quando o ROLLBACK também falha', async () => {
+    const originalConnect = pool.connect.bind(pool);
+    const releases: unknown[] = [];
+    const spy = jest.spyOn(pool, 'connect').mockImplementation((async () => {
+      const client = await originalConnect();
+      const originalRelease = client.release.bind(client);
+      client.release = ((arg?: boolean | Error) => {
+        releases.push(arg);
+        originalRelease(arg);
+      }) as typeof client.release;
+      return client;
+    }) as unknown as typeof pool.connect);
+
+    try {
+      // Derruba a própria conexão no meio da transação: a query e o ROLLBACK falham.
+      await expect(
+        withTransaction(pool, async (client) => {
+          await client.query('SELECT pg_terminate_backend(pg_backend_pid())');
+        }),
+      ).rejects.toThrow();
+    } finally {
+      spy.mockRestore();
+    }
+    expect(releases).toEqual([true]);
+    await expect(pool.query('SELECT 1')).resolves.toBeDefined();
+  });
+
+  it('release normal (sem descarte) quando o ROLLBACK funciona', async () => {
+    const originalConnect = pool.connect.bind(pool);
+    const releases: unknown[] = [];
+    const spy = jest.spyOn(pool, 'connect').mockImplementation((async () => {
+      const client = await originalConnect();
+      const originalRelease = client.release.bind(client);
+      client.release = ((arg?: boolean | Error) => {
+        releases.push(arg);
+        originalRelease(arg);
+      }) as typeof client.release;
+      return client;
+    }) as unknown as typeof pool.connect);
+    try {
+      await expect(
+        withTransaction(pool, async () => {
+          throw new Error('falhou');
+        }),
+      ).rejects.toThrow('falhou');
+    } finally {
+      spy.mockRestore();
+    }
+    expect(releases).toEqual([false]);
+  });
+
   it('faz COMMIT e devolve o resultado', async () => {
     const result = await withTransaction(pool, async (client) => {
       await client.query('INSERT INTO t04_tx_probe (n) VALUES ($1)', [1]);

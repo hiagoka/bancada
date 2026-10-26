@@ -2,6 +2,8 @@
 module.exports = {
   testEnvironment: 'node',
   watchman: false,
+  // Todos os testes compartilham um único banco: um arquivo por vez.
+  maxWorkers: 1,
   roots: ['<rootDir>/test'],
   testMatch: ['**/*.test.ts'],
   globalSetup: '<rootDir>/test/global-setup.ts',
