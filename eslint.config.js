@@ -7,6 +7,10 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
+    files: ['**/*.cjs'],
+    languageOptions: { globals: { module: 'writable' } },
+  },
+  {
     rules: {
       '@typescript-eslint/no-explicit-any': 'error',
       'no-console': 'error',
