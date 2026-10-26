@@ -36,12 +36,19 @@ const gateway =
 
 // Padrão = MinIO local (ver .env.example). A T12 troca por um S3StorageService completo.
 const storage = new PublicUrlStorageService(env.S3_PUBLIC_URL ?? 'http://localhost:9000/bancada');
+if (env.PAYMENT_PROVIDER === 'fake' && env.NODE_ENV === 'production') {
+  logger.warn(
+    'PAYMENT_PROVIDER=fake em produção: pagamentos simulados e /dev/payments/simulate expostos',
+  );
+}
+
 const app = createApp({
   pool,
   logger,
   webUrl: env.WEB_URL,
   storage,
   gateway,
+  webhookSecret: env.PAYMENT_PROVIDER === 'mercadopago' ? env.MP_WEBHOOK_SECRET : undefined,
 });
 const server = app.listen(env.PORT, (err?: Error) => {
   if (err) {

@@ -18,6 +18,7 @@ export class FakePaymentGateway implements PaymentGateway {
 
   // Instrumentação para os testes.
   createCheckoutCalls = 0;
+  getPaymentCalls = 0;
   lastCheckoutRequest: CheckoutRequest | null = null;
 
   private readonly webUrl: string;
@@ -25,6 +26,7 @@ export class FakePaymentGateway implements PaymentGateway {
   private readonly checkouts = new Map<string, CheckoutResult>();
   private readonly payments = new Map<string, Payment>();
   private pendingFailures = 0;
+  private pendingGetPaymentFailures = 0;
 
   constructor({ webUrl, delayMs = 0 }: FakePaymentGatewayOptions) {
     this.webUrl = webUrl.replace(/\/+$/, '');
@@ -38,6 +40,11 @@ export class FakePaymentGateway implements PaymentGateway {
   // As próximas n chamadas de createCheckout falham com GatewayError (indisponibilidade).
   failNextCheckout(n = 1): void {
     this.pendingFailures = n;
+  }
+
+  // As próximas n chamadas de getPayment falham como erro de rede/provedor (não notFound).
+  failNextGetPayment(n = 1): void {
+    this.pendingGetPaymentFailures = n;
   }
 
   // Idempotente por orderId, como a Preference do Mercado Pago com idempotencyKey.
@@ -67,8 +74,16 @@ export class FakePaymentGateway implements PaymentGateway {
   }
 
   async getPayment(paymentId: string): Promise<Payment> {
+    this.getPaymentCalls += 1;
+    if (this.pendingGetPaymentFailures > 0) {
+      this.pendingGetPaymentFailures -= 1;
+      throw new GatewayError('Gateway fake indisponível');
+    }
     const payment = this.payments.get(paymentId);
-    if (!payment) throw new GatewayError(`Pagamento ${paymentId} não encontrado no gateway fake`);
+    if (!payment)
+      throw new GatewayError(`Pagamento ${paymentId} não encontrado no gateway fake`, {
+        notFound: true,
+      });
     return payment;
   }
 }

@@ -47,6 +47,7 @@ Arquivos:
   order.ts     orderStatusSchema, createOrderInputSchema, publicOrderSchema (resposta pública, SEM dados do cliente), orderSchema (completo, só admin)
   auth.ts      loginInputSchema, adminSchema
   upload.ts    uploadRequestSchema, uploadResponseSchema
+  payment.ts   simulatePaymentInputSchema e statuses de pagamento do MP (usado por /dev/payments/simulate)
   errors.ts    apiErrorSchema, enum ErrorCode
   index.ts
 Regras:
@@ -171,8 +172,8 @@ Respostas de produto incluem imageUrl = S3_PUBLIC_URL/<image_key> (ou null). O b
  1. A rota lê type e data.id (query ou corpo). Se não for "payment", responde 200 e ignora.
  2. Valida a assinatura com WebhookSignatureValidator.validate({ xSignature, xRequestId, dataId, secret }), sem checagem de janela de tempo. Se falhar: 401.
  3. Busca o pagamento em gateway.getPayment(id). NUNCA confiar no corpo do webhook.
- 4. BEGIN; INSERT INTO payment_events ... ON CONFLICT DO NOTHING. Se não inserir: "duplicate", fim.
- 5. Trava o pedido (FOR UPDATE) e calcula o status alvo.
+ 4. BEGIN; trava o pedido (SELECT ... FROM orders WHERE id = external_reference FOR UPDATE). Travar ANTES de inserir o evento: na ordem inversa o INSERT segura FOR KEY SHARE no pedido (FK) e duas notificações simultâneas do mesmo pedido entram em deadlock (D20). Pedido inexistente: grava o evento com order_id NULL e outcome "order_not_found", responde 200.
+ 5. INSERT INTO payment_events ... ON CONFLICT DO NOTHING. Se não inserir: "duplicate", fim. Calcula o status alvo.
  6. Ordem das regras: sem mudança -> "no_change"; transição proibida -> "invalid_transition"; alvo PAID com valor diferente do total -> "amount_mismatch"; senão atualiza e devolve "applied".
  7. Alvo CANCELLED: para cada item, applyStockMovement com reason 'order_cancelled', delta positivo e order_id. Alvo REFUNDED NÃO devolve estoque (D13). Quando "applied", grava também orders.payment_id (e paid_at se PAID). Grava o outcome no evento. COMMIT.
  Cada combinação (provider, payment_id, status) é processada uma única vez; o mesmo pagamento mudando de status (pending -> approved) gera um evento novo, e uma nova tentativa depois de rejected costuma vir com outro payment_id.
@@ -349,6 +350,7 @@ D16 imageKey no PATCH: ausente mantém, null remove, string troca. Arquivos anti
 D17 Seed nunca sobrescreve produtos existentes (ON CONFLICT DO NOTHING): rodar de novo não desfaz edições feitas pelo admin.
 D18 Reconsulta da Idempotency-Key depois dos locks (8.1, passo 3b): sem isso, uma requisição repetida simultânea veria o estoque já reservado pela primeira e responderia OUT_OF_STOCK em vez de replay. Toda devolução de estoque (webhook CANCELLED, cancelamento manual) aplica os itens em ordem de productId, a mesma dos locks, para não dar deadlock com a criação de pedido.
 D19 A expiração da Preference é ancorada em orders.created_at + 30 min (não em "agora"): coincide com a janela do cancelamento manual (8.8), então um pedido nunca pode ser pago depois de cancelável. Retry do checkout depois dessa janela responde 502 CHECKOUT_UNAVAILABLE com details.reason = 'expired' (o web gera nova chave). Pagamento que chega depois do cancelamento cai em transição inválida: o pedido continua CANCELLED e o evento é gravado com log de alerta (T09).
+D20 Webhook, detalhes de implementação: (a) o pedido é travado antes do INSERT do evento (evita deadlock por FK); (b) status desconhecido do MP vira no_change com log, nunca 500; (c) pagamento que o provedor diz não existir (404 no getPayment, ex.: botão de teste do painel do MP) responde 200 "payment_not_found", sem evento; outros erros do provedor viram 5xx para o MP reenviar; (d) um segundo approved com outro payment_id num pedido já PAID é no_change com log de alerta de cobrança em dobro; (e) o status bruto do MP fica em payment_events; (f) schemas de pagamento ficam em contracts/src/payment.ts (simulatePaymentInputSchema, statuses do MP); (g) com NODE_ENV=production e PAYMENT_PROVIDER=fake o servidor recusa subir, a menos que ALLOW_FAKE_PAYMENTS=true (então só avisa em log).
 Mudança de arquitetura só registrando uma nova decisão aqui.
 
 ========================================

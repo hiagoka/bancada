@@ -230,9 +230,15 @@ describe('MercadoPagoGateway.getPayment', () => {
     expect((await gateway.getPayment('1')).status).toBe(status);
   });
 
-  it('status desconhecido, external_reference ou valor ausentes: GatewayError', async () => {
+  it("status desconhecido vira 'unknown' (o service trata como sem mudança), não erro", async () => {
+    const { gateway } = build({ getResult: async () => ({ ...approved, status: 'algo_novo' }) });
+    const payment = await gateway.getPayment('1');
+    expect(payment.status).toBe('unknown');
+    expect(payment.rawStatus).toBe('algo_novo');
+  });
+
+  it('external_reference ou valor ausentes/inválidos: GatewayError', async () => {
     for (const bad of [
-      { ...approved, status: 'algo_novo' },
       { ...approved, external_reference: undefined },
       { ...approved, transaction_amount: undefined },
       { ...approved, transaction_amount: Number.NaN },
@@ -243,6 +249,42 @@ describe('MercadoPagoGateway.getPayment', () => {
       const { gateway } = build({ getResult: async () => bad });
       await expect(gateway.getPayment('1')).rejects.toBeInstanceOf(GatewayError);
     }
+  });
+
+  it('404 do provedor (pagamento inexistente): GatewayError com notFound = true', async () => {
+    const { gateway } = build({
+      getResult: async () => {
+        throw Object.assign(new Error(`Payment not found ${TOKEN}`), { status: 404 });
+      },
+    });
+    const error = await gateway.getPayment('123456').catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(GatewayError);
+    expect((error as GatewayError).notFound).toBe(true);
+    expect(String((error as Error).message) + String((error as Error).stack)).not.toContain(TOKEN);
+  });
+
+  it.each([400, 401, 429, 500, 503])(
+    'HTTP %d do provedor NÃO é notFound (continua erro)',
+    async (status) => {
+      const { gateway } = build({
+        getResult: async () => {
+          throw Object.assign(new Error('falha'), { status });
+        },
+      });
+      const error = await gateway.getPayment('1').catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(GatewayError);
+      expect((error as GatewayError).notFound).toBe(false);
+    },
+  );
+
+  it('erro de rede sem status não é notFound', async () => {
+    const { gateway } = build({
+      getResult: async () => {
+        throw new Error('ECONNRESET');
+      },
+    });
+    const error = await gateway.getPayment('1').catch((e: unknown) => e);
+    expect((error as GatewayError).notFound).toBe(false);
   });
 
   it('erro do SDK vira GatewayError sem vazar o access token', async () => {

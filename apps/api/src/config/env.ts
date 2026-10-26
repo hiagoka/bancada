@@ -22,6 +22,12 @@ const envObject = z.object({
     .string({ error: 'é obrigatória' })
     .min(32, { error: 'deve ter no mínimo 32 caracteres' }),
   COOKIE_SAMESITE: z.enum(['lax', 'none'], { error: 'deve ser "lax" ou "none"' }).default('lax'),
+  NODE_ENV: optionalString,
+  // Libera PAYMENT_PROVIDER=fake em produção (pagamentos simulados, de propósito).
+  ALLOW_FAKE_PAYMENTS: z
+    .enum(['true', 'false'], { error: 'deve ser "true" ou "false"' })
+    .transform((v) => v === 'true')
+    .optional(),
   PAYMENT_PROVIDER: z
     .enum(['fake', 'mercadopago'], { error: 'deve ser "fake" ou "mercadopago"' })
     .default('fake'),
@@ -40,6 +46,19 @@ const envObject = z.object({
 });
 
 const envSchema = envObject.superRefine((env, ctx) => {
+  if (
+    env.NODE_ENV === 'production' &&
+    env.PAYMENT_PROVIDER === 'fake' &&
+    !env.ALLOW_FAKE_PAYMENTS
+  ) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['PAYMENT_PROVIDER'],
+      message:
+        'o provedor "fake" não pode ser usado em produção (pagamentos simulados). ' +
+        'Use "mercadopago" ou, se for de propósito, defina ALLOW_FAKE_PAYMENTS=true',
+    });
+  }
   if (env.PAYMENT_PROVIDER !== 'mercadopago') return;
   for (const name of ['MP_ACCESS_TOKEN', 'MP_WEBHOOK_SECRET'] as const) {
     if (!env[name]) {

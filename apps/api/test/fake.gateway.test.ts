@@ -45,7 +45,17 @@ describe('FakePaymentGateway', () => {
     expect(gateway.checkoutCount).toBe(1);
   });
 
-  it('registerPayment alimenta getPayment; id desconhecido lança GatewayError', async () => {
+  it('failNextGetPayment(n) falha com GatewayError que NÃO é notFound (erro de rede)', async () => {
+    const gateway = new FakePaymentGateway({ webUrl });
+    gateway.registerPayment({ id: '1', status: 'approved', orderId: 'o', amountCents: 1 });
+    gateway.failNextGetPayment(1);
+    const error = await gateway.getPayment('1').catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(GatewayError);
+    expect((error as GatewayError).notFound).toBe(false);
+    await expect(gateway.getPayment('1')).resolves.toBeDefined();
+  });
+
+  it('registerPayment alimenta getPayment; id desconhecido lança GatewayError notFound', async () => {
     const gateway = new FakePaymentGateway({ webUrl });
     gateway.registerPayment({ id: '99', status: 'approved', orderId: 'o', amountCents: 24900 });
     await expect(gateway.getPayment('99')).resolves.toEqual({
@@ -54,7 +64,9 @@ describe('FakePaymentGateway', () => {
       orderId: 'o',
       amountCents: 24900,
     });
-    await expect(gateway.getPayment('nope')).rejects.toBeInstanceOf(GatewayError);
+    const missing = await gateway.getPayment('nope').catch((e: unknown) => e);
+    expect(missing).toBeInstanceOf(GatewayError);
+    expect((missing as GatewayError).notFound).toBe(true);
   });
 
   it('registerPayment de novo atualiza o status do mesmo pagamento', async () => {

@@ -8,6 +8,9 @@ import { AppError } from './shared/errors.js';
 import { createOrdersRouter } from './modules/orders/orders.routes.js';
 import { OrdersService } from './modules/orders/orders.service.js';
 import { createProductsRouter } from './modules/products/products.routes.js';
+import { FakePaymentGateway } from './modules/payments/fake.gateway.js';
+import { PaymentWebhookService } from './modules/payments/payment-webhook.service.js';
+import { createPaymentsRouter } from './modules/payments/payments.routes.js';
 import type { PaymentGateway } from './modules/payments/payment-gateway.js';
 import type { StorageService } from './modules/storage/storage.service.js';
 import { errorHandler, notFoundHandler } from './shared/http.js';
@@ -24,21 +27,31 @@ export interface AppDeps {
   webUrl: string;
   storage: StorageService;
   gateway: PaymentGateway;
+  // Segredo do webhook do Mercado Pago; sem ele a rota /webhooks/mercadopago não é montada.
+  webhookSecret?: string;
   now?: () => Date;
 }
 
-export function createApp({ pool, logger, webUrl, storage, gateway, now }: AppDeps): Express {
+export function createApp({
+  pool,
+  logger,
+  webUrl,
+  storage,
+  gateway,
+  webhookSecret,
+  now,
+}: AppDeps): Express {
   const app = express();
 
   app.disable('x-powered-by');
   app.use(
     pinoHttp({
       logger,
-      // Nunca logar cookie, token ou credenciais (ARCHITECTURE.md, seção 12).
+      // Nunca logar cookie, token, credenciais nem a assinatura do webhook (seção 12).
       serializers: {
         req: (req: Parameters<typeof stdSerializers.req>[0]) => {
           const { headers, ...rest } = stdSerializers.req(req);
-          const safeHeaders = omitKeys(headers, ['cookie', 'authorization']);
+          const safeHeaders = omitKeys(headers, ['cookie', 'authorization', 'x-signature']);
           return { ...rest, headers: safeHeaders };
         },
         res: (res: Parameters<typeof stdSerializers.res>[0]) => {
@@ -71,6 +84,16 @@ export function createApp({ pool, logger, webUrl, storage, gateway, now }: AppDe
 
   app.use(createProductsRouter({ pool, storage }));
   app.use(createOrdersRouter({ ordersService: new OrdersService({ pool, gateway, logger, now }) }));
+
+  app.use(
+    createPaymentsRouter({
+      pool,
+      logger,
+      webhookService: new PaymentWebhookService({ pool, gateway, logger }),
+      webhookSecret,
+      fakeGateway: gateway instanceof FakePaymentGateway ? gateway : undefined,
+    }),
+  );
 
   app.use(notFoundHandler);
   app.use(errorHandler(logger));

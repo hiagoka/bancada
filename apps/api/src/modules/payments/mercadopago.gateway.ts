@@ -46,6 +46,15 @@ function isPaymentStatus(value: unknown): value is PaymentStatus {
   return PAYMENT_STATUSES.includes(value as PaymentStatus);
 }
 
+function httpStatusOf(err: unknown): number | undefined {
+  return typeof err === 'object' &&
+    err !== null &&
+    'status' in err &&
+    typeof err.status === 'number'
+    ? err.status
+    : undefined;
+}
+
 export class MercadoPagoGateway implements PaymentGateway {
   readonly name = 'mercadopago';
 
@@ -104,10 +113,7 @@ export class MercadoPagoGateway implements PaymentGateway {
     try {
       found = await this.payment.get({ id: paymentId });
     } catch (err) {
-      throw this.wrap('Falha ao consultar o pagamento no Mercado Pago', err);
-    }
-    if (!isPaymentStatus(found.status)) {
-      throw new GatewayError('Status de pagamento desconhecido no Mercado Pago');
+      throw this.wrap('Falha ao consultar o pagamento no Mercado Pago', err, true);
     }
     if (!found.external_reference) {
       throw new GatewayError('Pagamento do Mercado Pago sem external_reference');
@@ -118,21 +124,26 @@ export class MercadoPagoGateway implements PaymentGateway {
     }
     return {
       id: String(found.id ?? paymentId),
-      status: found.status,
+      ...(isPaymentStatus(found.status)
+        ? { status: found.status }
+        : { status: 'unknown' as const, rawStatus: String(found.status ?? '').slice(0, 64) }),
       orderId: found.external_reference,
       amountCents: Math.round(amount * 100),
     };
   }
 
   // Erros do SDK podem trazer o corpo/cabeçalhos da requisição: só a mensagem, sem o token.
-  private wrap(message: string, err: unknown): GatewayError {
+  private wrap(message: string, err: unknown, notFoundAware = false): GatewayError {
     const raw = err instanceof Error ? err.message : String(err);
     const status =
       typeof err === 'object' && err !== null && 'status' in err && typeof err.status === 'number'
         ? ` (HTTP ${err.status})`
         : '';
     const safe = raw.split(this.accessToken).join('[redacted]');
-    return new GatewayError(`${message}${status}`, { cause: new Error(safe) });
+    return new GatewayError(`${message}${status}`, {
+      cause: new Error(safe),
+      notFound: notFoundAware && httpStatusOf(err) === 404,
+    });
   }
 }
 

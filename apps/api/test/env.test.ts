@@ -78,6 +78,47 @@ describe('parseEnv', () => {
     expect(() => parseEnv({ ...validEnv, PAYMENT_PROVIDER: 'fake' })).not.toThrow();
   });
 
+  describe('provedor fake em produção', () => {
+    it('recusa NODE_ENV=production com PAYMENT_PROVIDER=fake (inclusive o padrão)', () => {
+      const error = failure({ ...validEnv, NODE_ENV: 'production' });
+      expect(error.issues.map((i) => i.variable)).toEqual(['PAYMENT_PROVIDER']);
+      expect(error.message).toContain('ALLOW_FAKE_PAYMENTS=true');
+      expect(error.message).toContain('produção');
+      const explicit = failure({ ...validEnv, NODE_ENV: 'production', PAYMENT_PROVIDER: 'fake' });
+      expect(explicit.issues[0]?.variable).toBe('PAYMENT_PROVIDER');
+    });
+
+    it('aceita com ALLOW_FAKE_PAYMENTS=true', () => {
+      const env = parseEnv({ ...validEnv, NODE_ENV: 'production', ALLOW_FAKE_PAYMENTS: 'true' });
+      expect(env.ALLOW_FAKE_PAYMENTS).toBe(true);
+    });
+
+    it('ALLOW_FAKE_PAYMENTS=false continua recusando', () => {
+      expect(
+        failure({ ...validEnv, NODE_ENV: 'production', ALLOW_FAKE_PAYMENTS: 'false' }).issues,
+      ).toHaveLength(1);
+    });
+
+    it('ALLOW_FAKE_PAYMENTS inválido é listado como variável inválida', () => {
+      const error = failure({ ...validEnv, ALLOW_FAKE_PAYMENTS: 'sim' });
+      expect(error.issues.map((i) => i.variable)).toEqual(['ALLOW_FAKE_PAYMENTS']);
+    });
+
+    it('fora de produção o fake é livre; em produção o mercadopago também', () => {
+      expect(() => parseEnv({ ...validEnv, NODE_ENV: 'development' })).not.toThrow();
+      expect(() => parseEnv(validEnv)).not.toThrow();
+      expect(() =>
+        parseEnv({
+          ...validEnv,
+          NODE_ENV: 'production',
+          PAYMENT_PROVIDER: 'mercadopago',
+          MP_ACCESS_TOKEN: 't',
+          MP_WEBHOOK_SECRET: 's',
+        }),
+      ).not.toThrow();
+    });
+  });
+
   it('rejeita PAYMENT_PROVIDER desconhecido', () => {
     expect(failure({ ...validEnv, PAYMENT_PROVIDER: 'paypal' }).issues[0]?.variable).toBe(
       'PAYMENT_PROVIDER',

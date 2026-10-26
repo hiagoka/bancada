@@ -1,25 +1,8 @@
-export type PaymentStatus =
-  | 'approved'
-  | 'pending'
-  | 'in_process'
-  | 'authorized'
-  | 'rejected'
-  | 'cancelled'
-  | 'refunded'
-  | 'charged_back'
-  | 'in_mediation';
+import { paymentStatusSchema, type PaymentStatus } from '@bancada/contracts';
 
-export const PAYMENT_STATUSES: readonly PaymentStatus[] = [
-  'approved',
-  'pending',
-  'in_process',
-  'authorized',
-  'rejected',
-  'cancelled',
-  'refunded',
-  'charged_back',
-  'in_mediation',
-];
+// Fonte única: o schema do contracts (a API de simulação usa o mesmo).
+export type { PaymentStatus };
+export const PAYMENT_STATUSES: readonly PaymentStatus[] = paymentStatusSchema.options;
 
 export interface CheckoutItem {
   name: string;
@@ -42,7 +25,10 @@ export interface CheckoutResult {
 
 export interface Payment {
   id: string;
-  status: PaymentStatus;
+  // 'unknown' = status que o sistema não reconhece (tratado como sem mudança).
+  status: PaymentStatus | 'unknown';
+  // Status original do provedor quando não reconhecido (para auditoria em payment_events).
+  rawStatus?: string;
   orderId: string;
   amountCents: number;
 }
@@ -55,8 +41,12 @@ export interface PaymentGateway {
 
 // Falha ao falar com o provedor de pagamento. A mensagem é segura para log (sem credenciais).
 export class GatewayError extends Error {
-  constructor(message: string, options?: { cause?: unknown }) {
-    super(message, options);
+  // true = o provedor respondeu 404 (o recurso não existe); qualquer outra falha é transitória.
+  readonly notFound: boolean;
+
+  constructor(message: string, options?: { cause?: unknown; notFound?: boolean }) {
+    super(message, options?.cause === undefined ? undefined : { cause: options.cause });
     this.name = 'GatewayError';
+    this.notFound = options?.notFound ?? false;
   }
 }
