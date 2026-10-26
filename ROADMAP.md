@@ -8,7 +8,7 @@ Uma tarefa por vez (api e web podem andar em paralelo quando não dependem uma d
 - [ ] **T03** [git] CI no GitHub Actions com Postgres como service: lint, typecheck, testes e build.
 
 ## Fase 1 · API base
-- [ ] **T04** [api] Esqueleto: env, pool, errors, http, createApp, server, /health. Aceite: /health 200; env inválida derruba o processo com mensagem clara.
+- [x] **T04** [api] Esqueleto: env, pool, errors, http, createApp, server, /health. Aceite: /health 200; env inválida derruba o processo com mensagem clara.
 - [ ] **T05** [api] Migração 001 completa (seção 6), runner de migrações, stock.repository (applyStockMovement), seed e setup de testes. Aceite: migrate idempotente; seed gera movimentos 'initial'; build copia os .sql sem comandos Unix.
 - [ ] **T06** [api] Produtos públicos: GET /products e /products/:id com imageUrl. Aceite: testes de listagem, inativo e 404.
 
