@@ -5,7 +5,7 @@ Uma tarefa por vez (api e web podem andar em paralelo quando não dependem uma d
 ## Fase 0 · Fundação
 - [ ] **T01** [org] Monorepo: workspaces, tsconfig.base.json, ESLint + Prettier, .gitignore, docker-compose com db, minio e minio-init. Aceite: npm install na raiz, docker compose up sobe banco e MinIO com bucket criado, lint passa.
 - [x] **T02** [api] packages/contracts com todos os schemas da seção 4 (inclui publicOrderSchema e os ErrorCodes ORDER_NOT_CANCELLABLE e CSRF_REJECTED). Aceite: importável nos dois apps, com teste unitário.
-- [ ] **T03** [git] CI no GitHub Actions com Postgres como service: lint, typecheck, testes e build.
+- [x] **T03** [git] CI no GitHub Actions com Postgres como service: lint, typecheck, testes e build.
 
 ## Fase 1 · API base
 - [x] **T04** [api] Esqueleto: env, pool, errors, http, createApp, server, /health. Aceite: /health 200; env inválida derruba o processo com mensagem clara.
