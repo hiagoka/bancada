@@ -1,0 +1,27 @@
+{
+  "name": "bancada",
+  "private": true,
+  "version": "0.0.0",
+  "description": "E-commerce de equipamentos para a mesa de trabalho de devs",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.13.0",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.9.10",
+    "typescript": "~5.9",
+    "typescript-eslint": "^8.72.1"
+  },
+  "type": "module"
+}
