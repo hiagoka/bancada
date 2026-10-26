@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: bancada
+          POSTGRES_PASSWORD: bancada
+          POSTGRES_DB: bancada
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U bancada -d bancada"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://bancada:bancada@localhost:5432/bancada
+      TEST_DATABASE_URL: postgres://bancada:bancada@localhost:5432/bancada_test
+      JWT_SECRET: ci-only-jwt-secret-with-at-least-32-chars
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # contracts precisa estar compilado antes do typecheck/testes dos apps
+      - run: npm run build -w @bancada/contracts
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
