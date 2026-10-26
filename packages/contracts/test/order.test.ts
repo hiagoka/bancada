@@ -1,4 +1,6 @@
 import {
+  adminOrdersPageSchema,
+  adminOrdersQuerySchema,
   createOrderInputSchema,
   orderSchema,
   orderStatusSchema,
@@ -175,5 +177,48 @@ describe('orderSchema', () => {
     expect(orderSchema.safeParse(omit(full, 'customer')).success).toBe(false);
     expect(orderSchema.safeParse({ ...full, cancellable: 'sim' }).success).toBe(false);
     expect(orderSchema.safeParse(omit(full, 'cancellable')).success).toBe(false);
+  });
+});
+
+describe('adminOrdersQuerySchema', () => {
+  it('padrão page=1 e status opcional', () => {
+    expect(adminOrdersQuerySchema.parse({})).toEqual({ page: 1 });
+    expect(adminOrdersQuerySchema.parse({ status: 'PAID', page: '3' })).toEqual({
+      status: 'PAID',
+      page: 3,
+    });
+  });
+
+  it.each(['0', '-1', '1.5', 'abc', '', '99999999999'])('rejeita page=%p', (page) => {
+    const result = adminOrdersQuerySchema.safeParse({ page });
+    expect(messagesOf(result)).toContain('A página deve ser um inteiro maior ou igual a 1');
+  });
+
+  it('rejeita status fora do enum e page repetido', () => {
+    expect(adminOrdersQuerySchema.safeParse({ status: 'paid' }).success).toBe(false);
+    expect(adminOrdersQuerySchema.safeParse({ page: ['1', '2'] }).success).toBe(false);
+  });
+});
+
+describe('adminOrdersPageSchema', () => {
+  const full = {
+    ...publicOrder,
+    customer: { name: 'Ana', email: 'ana@example.com' },
+    cancellable: true,
+  };
+
+  it('aceita a página com pedidos completos', () => {
+    const page = { items: [full], page: 1, pageSize: 20, total: 1 };
+    expect(adminOrdersPageSchema.parse(page)).toEqual(page);
+  });
+
+  it('aceita página vazia e rejeita pedido sem customer', () => {
+    expect(
+      adminOrdersPageSchema.safeParse({ items: [], page: 2, pageSize: 20, total: 0 }).success,
+    ).toBe(true);
+    expect(
+      adminOrdersPageSchema.safeParse({ items: [publicOrder], page: 1, pageSize: 20, total: 1 })
+        .success,
+    ).toBe(false);
   });
 });

@@ -1,8 +1,9 @@
-import { productSchema, type Product } from '@bancada/contracts';
+import type { Product } from '@bancada/contracts';
 import { Router } from 'express';
 import { z } from 'zod';
 import type { Db } from '../../db/pool.js';
 import { AppError } from '../../shared/errors.js';
+import { toPublicProduct } from './products.mapper.js';
 import type { StorageService } from '../storage/storage.service.js';
 import {
   findActiveProductById,
@@ -18,23 +19,7 @@ export interface ProductsRouterDeps {
 const idSchema = z.uuid();
 
 export function createProductsRouter({ pool, storage }: ProductsRouterDeps): Router {
-  // Só os campos públicos; o parse garante o contrato (nada de active, imageKey, datas).
-  const toPublic = (record: ProductRecord): Product => {
-    const parsed = productSchema.safeParse({
-      id: record.id,
-      slug: record.slug,
-      name: record.name,
-      description: record.description,
-      category: record.category,
-      priceCents: record.priceCents,
-      stock: record.stock,
-      imageUrl: record.imageKey ? storage.publicUrl(record.imageKey) : null,
-    });
-    // Dado do banco fora do contrato é bug nosso (500), não erro de validação do cliente (400).
-    if (!parsed.success)
-      throw new Error('Produto fora do contrato público', { cause: parsed.error });
-    return parsed.data;
-  };
+  const toPublic = (record: ProductRecord): Product => toPublicProduct(record, storage);
 
   const router = Router();
 

@@ -191,3 +191,72 @@ export async function setCheckoutIfMissing(
     [orderId, checkoutId, checkoutUrl],
   );
 }
+
+// --- Admin -----------------------------------------------------------------------------------
+
+export async function lockOrderForUpdate(db: Db, id: string): Promise<OrderRecord | null> {
+  const { rows } = await db.query<OrderRow>(
+    `SELECT ${ORDER_COLUMNS} FROM orders WHERE id = $1 FOR UPDATE`,
+    [id],
+  );
+  return rows[0] ? toOrder(rows[0]) : null;
+}
+
+export async function markOrderCancelled(db: Db, id: string): Promise<void> {
+  await db.query(`UPDATE orders SET status = 'CANCELLED', updated_at = now() WHERE id = $1`, [id]);
+}
+
+// Itens em ordem de product_id: a mesma ordem dos locks da criação de pedido (D18).
+export async function listItemsByProduct(
+  db: Db,
+  orderId: string,
+): Promise<{ productId: string; quantity: number }[]> {
+  const { rows } = await db.query<{ product_id: string; quantity: number }>(
+    'SELECT product_id, quantity FROM order_items WHERE order_id = $1 ORDER BY product_id',
+    [orderId],
+  );
+  return rows.map((r) => ({ productId: r.product_id, quantity: r.quantity }));
+}
+
+export async function listOrdersPage(
+  db: Db,
+  options: { status?: OrderStatus; limit: number; offset: number },
+): Promise<{ orders: OrderWithItems[]; total: number }> {
+  const filter = options.status ? 'WHERE status = $1::order_status' : '';
+  const filterParams = options.status ? [options.status] : [];
+
+  const totalResult = await db.query<{ n: number }>(
+    `SELECT count(*)::int AS n FROM orders ${filter}`,
+    filterParams,
+  );
+  const { rows } = await db.query<OrderRow>(
+    `SELECT ${ORDER_COLUMNS} FROM orders ${filter}
+     ORDER BY created_at DESC, id DESC
+     LIMIT $${filterParams.length + 1} OFFSET $${filterParams.length + 2}`,
+    [...filterParams, options.limit, options.offset],
+  );
+
+  // Uma consulta só para os itens da página (sem N+1).
+  const itemsByOrder = new Map<string, OrderItemRecord[]>();
+  if (rows.length > 0) {
+    const items = await db.query<ItemRow & { order_id: string }>(
+      `SELECT order_id, product_id, product_name, unit_price_cents, quantity
+       FROM order_items WHERE order_id = ANY($1::uuid[]) ORDER BY id`,
+      [rows.map((r) => r.id)],
+    );
+    for (const item of items.rows) {
+      const list = itemsByOrder.get(item.order_id) ?? [];
+      list.push({
+        productId: item.product_id,
+        productName: item.product_name,
+        unitPriceCents: item.unit_price_cents,
+        quantity: item.quantity,
+      });
+      itemsByOrder.set(item.order_id, list);
+    }
+  }
+  return {
+    orders: rows.map((row) => ({ ...toOrder(row), items: itemsByOrder.get(row.id) ?? [] })),
+    total: totalResult.rows[0]!.n,
+  };
+}

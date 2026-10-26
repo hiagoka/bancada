@@ -11,6 +11,16 @@ describe('stockAdjustmentSchema', () => {
     expect(parsed).toEqual({ delta: -2, reason: 'adjustment', note: 'quebra' });
   });
 
+  it('note em branco vira ausente (NULL no banco)', () => {
+    for (const note of ['', '   ']) {
+      const parsed = stockAdjustmentSchema.parse({ delta: 1, reason: 'restock', note });
+      expect(parsed.note).toBeUndefined();
+    }
+    expect(stockAdjustmentSchema.parse({ delta: 1, reason: 'restock', note: ' ok ' }).note).toBe(
+      'ok',
+    );
+  });
+
   it('rejeita delta 0 com mensagem em PT-BR', () => {
     const result = stockAdjustmentSchema.safeParse({ delta: 0, reason: 'restock' });
     expect(messagesOf(result)).toContain('A quantidade do ajuste não pode ser zero');

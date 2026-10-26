@@ -25,3 +25,11 @@ export const ALLOWED_TRANSITIONS: Record<OrderStatus, readonly OrderStatus[]> = 
 export function canTransition(from: OrderStatus, to: OrderStatus): boolean {
   return ALLOWED_TRANSITIONS[from].includes(to);
 }
+
+// 8.8 / D14 / D19: um pedido PENDING só pode ser cancelado manualmente depois de 30 minutos
+// (a Preference do provedor expira no mesmo instante). Mesmo helper para o campo `cancellable`.
+export const CANCEL_AFTER_MS = 30 * 60 * 1000;
+
+export function isCancellable(order: { status: OrderStatus; createdAt: Date }, now: Date): boolean {
+  return order.status === 'PENDING' && order.createdAt.getTime() < now.getTime() - CANCEL_AFTER_MS;
+}

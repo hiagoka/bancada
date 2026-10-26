@@ -24,6 +24,8 @@ export const stockAdjustmentSchema = z.object({
     .string({ error: 'A observação deve ser um texto' })
     .trim()
     .max(500, { error: 'A observação deve ter no máximo 500 caracteres' })
+    // Observação em branco vira "sem observação" (NULL no banco), não string vazia.
+    .transform((value) => (value === '' ? undefined : value))
     .optional(),
 });
 export type StockAdjustment = z.infer<typeof stockAdjustmentSchema>;

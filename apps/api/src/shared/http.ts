@@ -1,7 +1,7 @@
 import type { ErrorCode } from '@bancada/contracts';
 import type { ErrorRequestHandler, RequestHandler } from 'express';
 import type { Logger } from 'pino';
-import { ZodError, type ZodType } from 'zod';
+import { z, ZodError, type ZodType } from 'zod';
 import { AppError } from './errors.js';
 
 interface ErrorBody {
@@ -86,4 +86,13 @@ export function errorHandler(logger: Logger): ErrorRequestHandler {
     logger.error({ err: sanitizeError(err) }, 'Erro inesperado');
     res.status(500).json(errorBody('INTERNAL_ERROR', 'Erro interno do servidor'));
   };
+}
+
+const uuidParam = z.uuid();
+
+// Id de rota que não é UUID não existe: 404 sem passar pelo banco (evita o erro 22P02 do pg).
+export function uuidOrNotFound(value: unknown, message: string): string {
+  const parsed = uuidParam.safeParse(value);
+  if (!parsed.success) throw new AppError(404, 'NOT_FOUND', message);
+  return parsed.data;
 }

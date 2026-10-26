@@ -1,8 +1,8 @@
-import { createOrderInputSchema, publicOrderSchema, type PublicOrder } from '@bancada/contracts';
+import { createOrderInputSchema } from '@bancada/contracts';
 import { Router } from 'express';
 import { z } from 'zod';
 import { AppError } from '../../shared/errors.js';
-import type { OrderWithItems } from './orders.repository.js';
+import { toPublicOrder } from './orders.mapper.js';
 import type { OrdersService } from './orders.service.js';
 
 const idempotencyKeySchema = z
@@ -12,22 +12,6 @@ const idempotencyKeySchema = z
   .max(255, { error: 'O cabeçalho Idempotency-Key deve ter no máximo 255 caracteres' });
 
 const idSchema = z.uuid();
-
-// Resposta pública: SEM dados do cliente. checkoutUrl só enquanto o pedido está PENDING.
-export function toPublicOrder(order: OrderWithItems): PublicOrder {
-  const parsed = publicOrderSchema.safeParse({
-    id: order.id,
-    status: order.status,
-    items: order.items,
-    totalCents: order.totalCents,
-    checkoutUrl: order.status === 'PENDING' ? order.checkoutUrl : null,
-    paidAt: order.paidAt ? order.paidAt.toISOString() : null,
-    createdAt: order.createdAt.toISOString(),
-  });
-  // Dado do banco fora do contrato é bug nosso (500), não erro de validação do cliente.
-  if (!parsed.success) throw new Error('Pedido fora do contrato público', { cause: parsed.error });
-  return parsed.data;
-}
 
 export interface OrdersRouterDeps {
   ordersService: OrdersService;

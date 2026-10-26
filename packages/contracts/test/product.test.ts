@@ -1,10 +1,16 @@
 import {
+  adminProductDetailSchema,
   adminProductInputSchema,
+  adminProductsQuerySchema,
+  stockAdjustmentResultSchema,
   adminProductSchema,
   adminProductUpdateSchema,
   productSchema,
 } from '../src/index.js';
 import { isoDate, messagesOf, omit, uuid } from './fixtures.js';
+
+const IMAGE_KEY = 'products/3f2504e0-4f89-4d3a-9a0c-0305e82c3301.png';
+const IMAGE_KEY_WEBP = 'products/6ba7b810-9dad-41d1-80b5-00c04fd430c8.webp';
 
 const publicProduct = {
   id: uuid,
@@ -73,9 +79,7 @@ describe('adminProductSchema', () => {
 describe('adminProductInputSchema', () => {
   it('aceita entrada válida com e sem imageKey', () => {
     expect(adminProductInputSchema.safeParse(input).success).toBe(true);
-    expect(
-      adminProductInputSchema.safeParse({ ...input, imageKey: 'products/a.png' }).success,
-    ).toBe(true);
+    expect(adminProductInputSchema.safeParse({ ...input, imageKey: IMAGE_KEY }).success).toBe(true);
   });
 
   it('aceita estoque inicial 0', () => {
@@ -108,14 +112,24 @@ describe('adminProductInputSchema', () => {
     expect(adminProductInputSchema.safeParse({ ...input, initialStock: 1.2 }).success).toBe(false);
   });
 
+  it.each(['stock', 'slug', 'active', 'id', 'createdAt'])(
+    'rejeita o campo desconhecido %s em vez de descartá-lo em silêncio',
+    (field) => {
+      const result = adminProductInputSchema.safeParse({ ...input, [field]: 'x' });
+      expect(result.success).toBe(false);
+      expect(messagesOf(result).join(' ')).toContain(`Campo não permitido: ${field}`);
+    },
+  );
+
   it('rejeita campo obrigatório ausente', () => {
     expect(adminProductInputSchema.safeParse(omit(input, 'category')).success).toBe(false);
   });
 });
 
 describe('adminProductUpdateSchema', () => {
-  it('aceita objeto vazio', () => {
-    expect(adminProductUpdateSchema.parse({})).toEqual({});
+  it('rejeita corpo vazio com mensagem em PT-BR', () => {
+    const result = adminProductUpdateSchema.safeParse({});
+    expect(messagesOf(result)).toContain('Informe ao menos um campo para atualizar');
   });
 
   it('imageKey ausente continua ausente (mantém a imagem)', () => {
@@ -128,8 +142,8 @@ describe('adminProductUpdateSchema', () => {
   });
 
   it('imageKey string é preservado (troca a imagem)', () => {
-    expect(adminProductUpdateSchema.parse({ imageKey: 'products/b.webp' })).toEqual({
-      imageKey: 'products/b.webp',
+    expect(adminProductUpdateSchema.parse({ imageKey: IMAGE_KEY_WEBP })).toEqual({
+      imageKey: IMAGE_KEY_WEBP,
     });
   });
 
@@ -144,7 +158,83 @@ describe('adminProductUpdateSchema', () => {
     expect(adminProductUpdateSchema.safeParse({ priceCents: 0 }).success).toBe(false);
   });
 
-  it('ignora initialStock (estoque não é alterado pelo PATCH)', () => {
-    expect(adminProductUpdateSchema.parse({ initialStock: 9 })).toEqual({});
+  it.each(['stock', 'initialStock', 'slug', 'id', 'createdAt', 'passwordHash'])(
+    'rejeita o campo desconhecido %s (estoque e slug não são alterados pelo PATCH)',
+    (field) => {
+      const result = adminProductUpdateSchema.safeParse({ name: 'Ok', [field]: 'x' });
+      expect(result.success).toBe(false);
+      expect(messagesOf(result).join(' ')).toContain('Campo não permitido');
+    },
+  );
+});
+
+describe('formato do imageKey (chave gerada pelo upload, T12)', () => {
+  it.each(['jpg', 'png', 'webp'])('aceita products/<uuid>.%s', (ext) => {
+    const key = `products/3f2504e0-4f89-4d3a-9a0c-0305e82c3301.${ext}`;
+    expect(adminProductInputSchema.safeParse({ ...input, imageKey: key }).success).toBe(true);
+    expect(adminProductUpdateSchema.safeParse({ imageKey: key }).success).toBe(true);
+  });
+
+  it.each([
+    'products/a.png',
+    'abc',
+    '../products/3f2504e0-4f89-4d3a-9a0c-0305e82c3301.png',
+    'products/3f2504e0-4f89-4d3a-9a0c-0305e82c3301.gif',
+    'products/3f2504e0-4f89-4d3a-9a0c-0305e82c3301.png/extra',
+    'products/3F2504E0-4F89-4D3A-9A0C-0305E82C3301.png',
+    'other/3f2504e0-4f89-4d3a-9a0c-0305e82c3301.png',
+    'https://evil.example/x.png',
+    '',
+  ])('rejeita %p com mensagem em PT-BR', (key) => {
+    const create = adminProductInputSchema.safeParse({ ...input, imageKey: key });
+    const update = adminProductUpdateSchema.safeParse({ imageKey: key });
+    expect(messagesOf(create)).toContain('Chave de imagem inválida');
+    expect(messagesOf(update)).toContain('Chave de imagem inválida');
+  });
+});
+
+describe('adminProductsQuerySchema', () => {
+  it('aceita vazio, q e active=true|false (convertido para boolean)', () => {
+    expect(adminProductsQuerySchema.parse({})).toEqual({});
+    expect(adminProductsQuerySchema.parse({ q: ' mouse ', active: 'false' })).toEqual({
+      q: 'mouse',
+      active: false,
+    });
+    expect(adminProductsQuerySchema.parse({ active: 'true' })).toEqual({ active: true });
+  });
+
+  it.each(['yes', '1', 'TRUE', ''])('rejeita active=%p', (active) => {
+    const result = adminProductsQuerySchema.safeParse({ active });
+    expect(messagesOf(result)).toContain('O filtro active deve ser "true" ou "false"');
+  });
+
+  it('rejeita q muito longo e q repetido (array)', () => {
+    expect(adminProductsQuerySchema.safeParse({ q: 'x'.repeat(101) }).success).toBe(false);
+    expect(adminProductsQuerySchema.safeParse({ q: ['a', 'b'] }).success).toBe(false);
+  });
+});
+
+describe('adminProductDetailSchema e stockAdjustmentResultSchema', () => {
+  const movement = {
+    id: 1,
+    productId: uuid,
+    delta: 5,
+    reason: 'restock',
+    orderId: null,
+    adminId: null,
+    note: null,
+    stockAfter: 8,
+    createdAt: isoDate,
+  };
+
+  it('detalhe = produto de admin + movimentações', () => {
+    const detail = { ...adminProduct, movements: [movement] };
+    expect(adminProductDetailSchema.parse(detail)).toEqual(detail);
+    expect(adminProductDetailSchema.safeParse(adminProduct).success).toBe(false);
+  });
+
+  it('resultado do ajuste = produto + movimento', () => {
+    const result = { product: adminProduct, movement };
+    expect(stockAdjustmentResultSchema.parse(result)).toEqual(result);
   });
 });

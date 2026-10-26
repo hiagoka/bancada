@@ -76,3 +76,25 @@ export const orderSchema = publicOrderSchema.extend({
   cancellable: z.boolean(),
 });
 export type Order = z.infer<typeof orderSchema>;
+
+export const ADMIN_ORDERS_PAGE_SIZE = 20;
+
+// GET /admin/orders?status=&page=
+export const adminOrdersQuerySchema = z.object({
+  status: orderStatusSchema.optional(),
+  page: z.coerce
+    .number({ error: 'A página deve ser um inteiro maior ou igual a 1' })
+    .int({ error: 'A página deve ser um inteiro maior ou igual a 1' })
+    .min(1, { error: 'A página deve ser um inteiro maior ou igual a 1' })
+    .max(1_000_000, { error: 'A página deve ser um inteiro maior ou igual a 1' })
+    .default(1),
+});
+export type AdminOrdersQuery = z.infer<typeof adminOrdersQuerySchema>;
+
+export const adminOrdersPageSchema = z.object({
+  items: z.array(orderSchema),
+  page: z.number().int().min(1),
+  pageSize: z.number().int().positive(),
+  total: z.number().int().nonnegative(),
+});
+export type AdminOrdersPage = z.infer<typeof adminOrdersPageSchema>;

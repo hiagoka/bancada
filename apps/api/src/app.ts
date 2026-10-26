@@ -6,6 +6,10 @@ import type { Logger } from 'pino';
 import { stdSerializers } from 'pino';
 import { pinoHttp } from 'pino-http';
 import { AppError } from './shared/errors.js';
+import { createAdminOrdersRouter } from './modules/admin/admin-orders.routes.js';
+import { AdminOrdersService } from './modules/admin/admin-orders.service.js';
+import { createAdminProductsRouter } from './modules/admin/admin-products.routes.js';
+import { AdminProductsService } from './modules/admin/admin-products.service.js';
 import { createAuthRouter, type LoginRateLimit } from './modules/auth/auth.routes.js';
 import { AuthService, BCRYPT_COST_PRODUCTION } from './modules/auth/auth.service.js';
 import { createRequireAdmin } from './modules/auth/require-admin.js';
@@ -127,6 +131,11 @@ export function createApp({
   );
   // Tudo em /admin exige admin logado. A T11 pendura as rotas aqui, depois deste middleware.
   app.use('/admin', requireAdmin);
+  app.use(
+    '/admin',
+    createAdminProductsRouter({ service: new AdminProductsService({ pool, storage }) }),
+  );
+  app.use('/admin', createAdminOrdersRouter({ service: new AdminOrdersService({ pool, now }) }));
 
   app.use(createProductsRouter({ pool, storage }));
   app.use(createOrdersRouter({ ordersService: new OrdersService({ pool, gateway, logger, now }) }));
