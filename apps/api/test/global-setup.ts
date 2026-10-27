@@ -9,6 +9,7 @@ const DEFAULT_TEST_DATABASE_URL = 'postgres://bancada:bancada@localhost:5432/ban
 
 // Cria o banco de TEST_DATABASE_URL se não existir, recria o schema e roda as migrações.
 export default async function globalSetup(): Promise<void> {
+  await probeMinio();
   const apiDir = resolve(__dirname, '..');
   const envFile = resolve(apiDir, '.env');
   if (existsSync(envFile)) process.loadEnvFile(envFile);
@@ -65,5 +66,23 @@ export default async function globalSetup(): Promise<void> {
   });
   if (migrate.status !== 0) {
     throw new Error(`Falha ao migrar o banco de teste:\n${migrate.stdout}\n${migrate.stderr}`);
+  }
+}
+
+// Os testes de integração do S3 usam o MinIO real. Avisa aqui (uma vez) se não estiver no ar;
+// com REQUIRE_MINIO=true o próprio arquivo de testes FALHA em vez de pular.
+async function probeMinio(): Promise<void> {
+  const endpoint = process.env.S3_TEST_ENDPOINT ?? 'http://localhost:9000';
+  try {
+    const res = await fetch(`${endpoint}/minio/health/live`, { signal: AbortSignal.timeout(2000) });
+    process.env.MINIO_AVAILABLE = res.ok ? 'true' : 'false';
+  } catch {
+    process.env.MINIO_AVAILABLE = 'false';
+  }
+  if (process.env.MINIO_AVAILABLE !== 'true' && process.env.REQUIRE_MINIO !== 'true') {
+    process.stderr.write(
+      `\nAVISO: MinIO não respondeu em ${endpoint}: os testes de integração do S3 serão PULADOS ` +
+        '(defina REQUIRE_MINIO=true para exigir).\n',
+    );
   }
 }

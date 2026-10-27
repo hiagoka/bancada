@@ -1,6 +1,7 @@
-import type { UploadRequest, UploadResponse } from '@bancada/contracts';
+import type { UploadResponse } from '@bancada/contracts';
 
 export interface StorageService {
-  createUpload(contentType: UploadRequest['contentType']): Promise<UploadResponse>;
+  // Lança AppError 400 INVALID_FILE_TYPE para tipos fora de jpeg/png/webp.
+  createUpload(contentType: string): Promise<UploadResponse>;
   publicUrl(key: string): string;
 }

@@ -20,7 +20,7 @@ Uma tarefa por vez (api e web podem andar em paralelo quando não dependem uma d
 ## Fase 3 · Administração (API)
 - [x] **T10** [api] Autenticação (8.5): login, logout, me, requireAdmin, rate limit, proteção CSRF (requireCsrfHeader, D15), script create-admin. Aceite: testes de auth e "POST em rota admin com cookie válido e sem o header dá 403".
 - [x] **T11** [api] Produtos e estoque do admin (8.6) + lista de pedidos + POST /admin/orders/:id/cancel (8.8). Aceite: testes de produto, slug, ajuste, desativação, imageKey (ausente/null/string), concorrência admin x pedidos, cancelamento (antes de 30 min: 409; depois: cancela e devolve estoque; PAID: 409) e estorno sem mexer no estoque.
-- [ ] **T12** [api] StorageService + rota de upload (8.7). Aceite: testes de upload; upload real funcionando no MinIO local.
+- [x] **T12** [api] StorageService + rota de upload (8.7). Aceite: testes de upload; upload real funcionando no MinIO local.
 
 ## Fase 4 · Loja (web)
 - [ ] **T13** [web] Esqueleto: Vite, router, QueryClient, Layout, tokens.css, cliente http com credentials, header X-Requested-With: bancada-web e ApiError.

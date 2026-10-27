@@ -10,6 +10,7 @@ import { createAdminOrdersRouter } from './modules/admin/admin-orders.routes.js'
 import { AdminOrdersService } from './modules/admin/admin-orders.service.js';
 import { createAdminProductsRouter } from './modules/admin/admin-products.routes.js';
 import { AdminProductsService } from './modules/admin/admin-products.service.js';
+import { createUploadsRouter } from './modules/admin/uploads.routes.js';
 import { createAuthRouter, type LoginRateLimit } from './modules/auth/auth.routes.js';
 import { AuthService, BCRYPT_COST_PRODUCTION } from './modules/auth/auth.service.js';
 import { createRequireAdmin } from './modules/auth/require-admin.js';
@@ -135,6 +136,7 @@ export function createApp({
     '/admin',
     createAdminProductsRouter({ service: new AdminProductsService({ pool, storage }) }),
   );
+  app.use('/admin', createUploadsRouter({ storage }));
   app.use('/admin', createAdminOrdersRouter({ service: new AdminOrdersService({ pool, now }) }));
 
   app.use(createProductsRouter({ pool, storage }));

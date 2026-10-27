@@ -1,4 +1,10 @@
-import { uploadRequestSchema, uploadResponseSchema } from '../src/index.js';
+import {
+  ALLOWED_UPLOAD_CONTENT_TYPES,
+  INVALID_FILE_TYPE_MESSAGE,
+  MAX_UPLOAD_BYTES,
+  uploadRequestSchema,
+  uploadResponseSchema,
+} from '../src/index.js';
 import { messagesOf } from './fixtures.js';
 
 describe('uploadRequestSchema', () => {
@@ -33,5 +39,13 @@ describe('uploadResponseSchema', () => {
     expect(
       uploadResponseSchema.safeParse({ uploadUrl: 'http://x', fields: { a: 1 }, key: 'k' }).success,
     ).toBe(false);
+  });
+});
+
+describe('constantes de upload', () => {
+  it('tipos permitidos, limite de 2 MB e mensagem em PT-BR', () => {
+    expect([...ALLOWED_UPLOAD_CONTENT_TYPES]).toEqual(['image/jpeg', 'image/png', 'image/webp']);
+    expect(MAX_UPLOAD_BYTES).toBe(2 * 1024 * 1024);
+    expect(INVALID_FILE_TYPE_MESSAGE).toBe('Tipo de arquivo não permitido. Use JPEG, PNG ou WebP');
   });
 });

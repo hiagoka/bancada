@@ -56,6 +56,13 @@ describe('server.ts: provedor fake em produção', () => {
     JWT_SECRET: 'x'.repeat(32),
     NODE_ENV: 'production',
     PAYMENT_PROVIDER: 'fake',
+    S3_REGION: 'us-east-1',
+    S3_BUCKET: 'bancada',
+    S3_ACCESS_KEY_ID: 'minioadmin',
+    S3_SECRET_ACCESS_KEY: 'minioadmin',
+    S3_PUBLIC_URL: 'http://localhost:9000/bancada',
+    S3_FORCE_PATH_STYLE: 'true',
+    S3_ENDPOINT: 'http://localhost:9000',
   };
 
   it('recusa subir sem ALLOW_FAKE_PAYMENTS, com mensagem clara em PT-BR e código != 0', () => {

@@ -1,18 +1,17 @@
-import { randomUUID } from 'node:crypto';
-import type { UploadRequest, UploadResponse } from '@bancada/contracts';
+import type { UploadResponse } from '@bancada/contracts';
 import type { StorageService } from './storage.service.js';
+import { newUploadKey } from './upload-key.js';
 
-const EXTENSIONS: Record<UploadRequest['contentType'], string> = {
-  'image/jpeg': 'jpg',
-  'image/png': 'png',
-  'image/webp': 'webp',
-};
-
-// Para testes: sem rede e com URLs determinísticas.
+// Para testes: sem rede e com URLs determinísticas. Mesma validação de tipo e mesmo formato de
+// chave do S3StorageService.
 export class FakeStorageService implements StorageService {
-  async createUpload(contentType: UploadRequest['contentType']): Promise<UploadResponse> {
-    const key = `products/${randomUUID()}.${EXTENSIONS[contentType]}`;
-    return { uploadUrl: 'https://upload.test/bancada', fields: { key }, key };
+  async createUpload(contentType: string): Promise<UploadResponse> {
+    const key = newUploadKey(contentType);
+    return {
+      uploadUrl: 'https://upload.test/bancada',
+      fields: { key, 'Content-Type': contentType },
+      key,
+    };
   }
 
   publicUrl(key: string): string {

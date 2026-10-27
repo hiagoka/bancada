@@ -4,7 +4,7 @@ import { EnvError, loadEnv, type Env } from './config/env.js';
 import { createPool } from './db/pool.js';
 import { FakePaymentGateway } from './modules/payments/fake.gateway.js';
 import { createMercadoPagoGateway } from './modules/payments/mercadopago.gateway.js';
-import { PublicUrlStorageService } from './modules/storage/public-url.storage.js';
+import { createS3Storage } from './modules/storage/s3.storage.js';
 
 const SHUTDOWN_TIMEOUT_MS = 10_000;
 
@@ -34,8 +34,15 @@ const gateway =
       })
     : new FakePaymentGateway({ webUrl: env.WEB_URL });
 
-// Padrão = MinIO local (ver .env.example). A T12 troca por um S3StorageService completo.
-const storage = new PublicUrlStorageService(env.S3_PUBLIC_URL ?? 'http://localhost:9000/bancada');
+const storage = createS3Storage({
+  region: env.S3_REGION,
+  bucket: env.S3_BUCKET,
+  accessKeyId: env.S3_ACCESS_KEY_ID,
+  secretAccessKey: env.S3_SECRET_ACCESS_KEY,
+  publicUrl: env.S3_PUBLIC_URL,
+  endpoint: env.S3_ENDPOINT,
+  forcePathStyle: env.S3_FORCE_PATH_STYLE,
+});
 if (env.PAYMENT_PROVIDER === 'fake' && env.NODE_ENV === 'production') {
   logger.warn(
     'PAYMENT_PROVIDER=fake em produção: pagamentos simulados e /dev/payments/simulate expostos',

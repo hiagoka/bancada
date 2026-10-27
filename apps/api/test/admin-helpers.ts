@@ -4,6 +4,7 @@ import type { Pool } from 'pg';
 import request from 'supertest';
 import { createApp } from '../src/app.js';
 import { FakePaymentGateway } from '../src/modules/payments/fake.gateway.js';
+import type { StorageService } from '../src/modules/storage/storage.service.js';
 import { FakeStorageService } from '../src/modules/storage/fake.storage.js';
 import { CSRF, insertAdminWithPassword, tokenFor } from './auth-helpers.js';
 import { authDeps, silentLogger } from './helpers.js';
@@ -24,7 +25,10 @@ export interface AdminCtx {
   patch: (path: string, body?: object) => request.Test;
 }
 
-export async function buildAdminCtx(pool: Pool): Promise<AdminCtx> {
+export async function buildAdminCtx(
+  pool: Pool,
+  storage: StorageService = new FakeStorageService(),
+): Promise<AdminCtx> {
   const adminId = await insertAdminWithPassword(pool);
   const cookie = `bancada_admin=${tokenFor(adminId)}`;
   const gateway = new FakePaymentGateway({ webUrl });
@@ -34,7 +38,7 @@ export async function buildAdminCtx(pool: Pool): Promise<AdminCtx> {
     pool,
     logger: silentLogger,
     webUrl,
-    storage: new FakeStorageService(),
+    storage,
     gateway,
     now: () => clock.now ?? new Date(),
   });
