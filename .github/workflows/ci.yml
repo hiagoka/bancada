@@ -39,14 +39,10 @@ jobs:
       - run: npm run lint
       - run: npm run format:check
       - run: npm run typecheck
-      - name: MinIO (S3 local) com o bucket bancada
+      - name: MinIO (S3 local) com o bucket bancada, via docker-compose
         run: |
-          docker run -d --name minio -p 9000:9000 \
-            -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
-            minio/minio server /data
-          until curl -sf http://localhost:9000/minio/health/live; do sleep 1; done
-          docker run --rm --network host --entrypoint sh minio/mc -c \
-            "mc alias set local http://localhost:9000 minioadmin minioadmin && mc mb local/bancada && mc anonymous set download local/bancada"
+          docker compose up -d minio minio-init
+          test "$(docker wait "$(docker compose ps -aq minio-init)")" = "0"
       - run: npm test
         env:
           REQUIRE_MINIO: 'true'

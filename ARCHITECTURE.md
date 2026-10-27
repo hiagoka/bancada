@@ -280,8 +280,8 @@ Identidade visual:
 ========================================
 docker-compose.yml:
   db           postgres:16-alpine com healthcheck
-  minio        minio/minio (S3 local), portas 9000 (API) e 9001 (console)
-  minio-init   minio/mc: cria o bucket e libera leitura pública, depois encerra
+  minio        pgsty/minio (S3 local; fork do MinIO, D24), portas 9000 (API) e 9001 (console)
+  minio-init   pgsty/mc: cria o bucket e libera leitura pública, depois encerra
   api          Dockerfile multi-stage; no start roda as migrações
   web          build do Vite servido por nginx com fallback de SPA
 Produção: API na AWS (App Runner ou ECS + RDS), imagens no S3, web na Vercel.
@@ -354,6 +354,7 @@ D20 Webhook, detalhes de implementação: (a) o pedido é travado antes do INSER
 D21 Auth, detalhes de implementação: (a) o CSRF roda ANTES do parser de JSON (POST sem header e com JSON malformado dá 403, não 400); (b) respostas de /auth e /admin levam Cache-Control: no-store; (c) variáveis opcionais BCRYPT_COST (padrão 12; o script admin:create grava sempre custo 12, então em produção manter 12 para o tempo do login com e-mail inexistente não se diferenciar) e TRUST_PROXY (padrão false; atrás de ALB/App Runner usar 1, senão todos os clientes compartilham o mesmo IP no rate limit); (d) logout não revoga o token (JWT stateless, vale até 8h): citar no README; (e) --password do admin:create fica no histórico do shell: próximo passo é ler de variável de ambiente.
 D22 Admin, detalhes de implementação: (a) o slug é imutável (editar o nome não o muda); (b) POST e PATCH de produto são estritos: campos desconhecidos (stock, slug, active na criação) dão 400, corpo vazio no PATCH dá 400; (c) imageKey deve casar products/<uuid>.(jpg|png|webp); a existência do objeto no bucket não é conferida (T12 pode conferir); (d) GET /admin/orders tem pageSize fixo de 20 e devolve {items, page, pageSize, total}; (e) cancellable é calculado no servidor (PENDING e created_at < agora - 30 min); created_at vem do relógio do banco e o "agora" do Node, então uma diferença de segundos entre eles desloca a janela (citar no README); (f) nota em branco no ajuste de estoque vira NULL; (g) só o estoque tem livro-razão: edição de preço e de active não guardam autor (próximo passo).
 D23 Upload, detalhes de implementação: (a) key products/<uuid v4>.<jpg|png|webp>; (b) o S3 só impõe o contentType DECLARADO e o tamanho (0 a 2 MB), não valida o conteúdo real do arquivo; (c) variáveis S3_* têm padrão do MinIO local fora de produção e são obrigatórias em produção (exceto S3_ENDPOINT); (d) testes de integração reais contra o MinIO pulam com aviso se ele não responder, mas FALHAM com REQUIRE_MINIO=true (o CI define); (e) bucket real da AWS precisa de CORS (AllowedOrigins = WEB_URL, AllowedMethods = POST, AllowedHeaders = *, ExposeHeaders = ETag) e leitura pública dos objetos ou CloudFront; (f) credenciais fixas obrigatórias em produção impedem IAM role (revisar na T23); (g) a existência do objeto não é conferida ao salvar o produto.
+D24 S3 local: as imagens oficiais minio/minio e minio/mc foram removidas do Docker Hub e do Quay (o MinIO parou de publicá-las). Usamos o fork mantido pgsty/minio e pgsty/mc, com a mesma API S3; o código só fala S3 (D10), então trocar de provedor local não muda nada além do docker-compose. O CI sobe minio e minio-init pelo docker-compose, o que também prova o compose.
 Mudança de arquitetura só registrando uma nova decisão aqui.
 
 ========================================
