@@ -14,6 +14,8 @@ export type CheckoutFailure =
   | { kind: 'unavailable'; items: { productId: string; name: string }[] }
   | { kind: 'checkout_unavailable'; expired: boolean }
   | { kind: 'reused' }
+  // O servidor devolveu um pedido que já foi encerrado (replay de chave antiga: CANCELLED/REFUNDED).
+  | { kind: 'closed' }
   | { kind: 'validation'; messages: string[] }
   | { kind: 'network' }
   | { kind: 'generic' };

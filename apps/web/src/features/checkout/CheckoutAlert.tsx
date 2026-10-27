@@ -70,6 +70,12 @@ export function CheckoutAlert({
         </p>
       ) : null}
 
+      {failure.kind === 'closed' ? (
+        <p className="checkout-alert__title">
+          Esse pedido já foi encerrado. Confira os dados e tente de novo.
+        </p>
+      ) : null}
+
       {failure.kind === 'reused' ? (
         <p className="checkout-alert__title">Não foi possível concluir o pedido. Tente de novo.</p>
       ) : null}

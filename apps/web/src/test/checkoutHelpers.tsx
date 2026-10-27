@@ -68,7 +68,9 @@ export function deferred<T>() {
   return { promise, resolve };
 }
 
-export function renderCheckout(options: { redirectExternal?: (url: string) => void } = {}) {
+export function renderCheckout(
+  options: { redirectExternal?: (url: string) => void; now?: () => number } = {},
+) {
   // retry: 3 nas mutações de propósito: prova que o useCreateOrder NÃO repete sozinho.
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: 3, retryDelay: 1 } },
@@ -80,7 +82,7 @@ export function renderCheckout(options: { redirectExternal?: (url: string) => vo
         <Routes>
           <Route
             path="/carrinho"
-            element={<CheckoutForm redirectExternal={options.redirectExternal} />}
+            element={<CheckoutForm redirectExternal={options.redirectExternal} now={options.now} />}
           />
           <Route path="/checkout-simulado/:id" element={<p>SIMULADO</p>} />
           <Route path="/pedido/:id" element={<p>PEDIDO</p>} />

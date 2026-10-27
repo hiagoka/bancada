@@ -28,9 +28,11 @@ const defaultRedirectExternal = (url: string): void => window.location.assign(ur
 interface Props {
   // Redirecionamento para fora do site (Mercado Pago). Injetável para testar sem navegar de verdade.
   redirectExternal?: (url: string) => void;
+  // Relógio injetável (testes): idade máxima da chave salva.
+  now?: () => number;
 }
 
-export function CheckoutForm({ redirectExternal = defaultRedirectExternal }: Props) {
+export function CheckoutForm({ redirectExternal = defaultRedirectExternal, now }: Props) {
   const lines = useCartStore((state) => state.lines);
   const total = useCartStore(selectSubtotalCents);
   const clear = useCartStore((state) => state.clear);
@@ -40,7 +42,7 @@ export function CheckoutForm({ redirectExternal = defaultRedirectExternal }: Pro
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const mutation = useCreateOrder();
-  const idempotency = useIdempotencyKey();
+  const idempotency = useIdempotencyKey(now);
 
   const [failure, setFailure] = useState<{ value: CheckoutFailure; attempt: number } | null>(null);
   // Guarda contra duplo clique: o `disabled` só vale depois do re-render, esta ref é imediata.
@@ -74,10 +76,11 @@ export function CheckoutForm({ redirectExternal = defaultRedirectExternal }: Pro
     const expectedTotal = current.reduce((sum, l) => sum + l.product.priceCents * l.quantity, 0);
     announce('Criando seu pedido…');
 
+    const signature = orderSignature(current, customer);
     let order: PublicOrder;
     try {
       // Dentro do try: se algo falhar antes do envio (ex.: gerar a chave), aparece como erro na tela.
-      const key = idempotency.keyFor(orderSignature(current, customer));
+      const key = idempotency.keyFor(signature);
       order = await mutation.mutateAsync({
         input: {
           customer,
@@ -92,10 +95,27 @@ export function CheckoutForm({ redirectExternal = defaultRedirectExternal }: Pro
         described.kind === 'reused' ||
         (described.kind === 'checkout_unavailable' && described.expired)
       ) {
-        idempotency.renew();
+        try {
+          idempotency.rotate(signature); // gera e grava a nova chave
+        } catch {
+          idempotency.renew(); // sem como gerar agora: a próxima tentativa tenta de novo
+        }
       }
       failureCount.current += 1;
       setFailure({ value: described, attempt: failureCount.current });
+      return;
+    }
+
+    // Pedido que NÃO está PENDING (replay de uma chave antiga: o admin cancelou, estornou ou já foi
+    // pago): não é um checkout bem-sucedido. Nada de limpar o carrinho nem ir ao pagamento.
+    if (order.status !== 'PENDING') {
+      idempotency.renew(); // a próxima tentativa usa chave nova
+      if (order.status === 'PAID') {
+        navigate(`/pedido/${order.id}`); // a página do pedido mostra o pagamento
+        return;
+      }
+      failureCount.current += 1;
+      setFailure({ value: { kind: 'closed' }, attempt: failureCount.current });
       return;
     }
 
