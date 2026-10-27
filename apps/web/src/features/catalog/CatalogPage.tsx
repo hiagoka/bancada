@@ -1,25 +1,67 @@
-import { ButtonLink } from '../../components/Button';
+import { NetworkError } from '../../api/http';
+import { Button } from '../../components/Button';
 import { useDocumentTitle } from '../../lib/useDocumentTitle';
+import { CategorySection } from './CategorySection';
+import { Hero } from './Hero';
+import { Manifesto } from './Manifesto';
+import { groupByCategory } from './groupByCategory';
+import { useProducts } from './useProducts';
+import './catalog.css';
 
-// Provisória (T14 traz hero, manifesto e grade de produtos). O título gigante prova a tipografia
-// (16vw no celular, 13.5vw no desktop) e o recuo da segunda linha (20vw). Medido com a fonte real:
-// "BANCADA" (4,5 em) e "NO AR." (3,0 em) cabem em 360px com o recuo; "ORGANIZADA." (6,2 em)
-// NÃO cabe nem sem recuo a 16vw: o hero da T14 precisa de outro tamanho ou de outra quebra.
+function CatalogSkeleton() {
+  return (
+    <div className="container catalog-skeleton" aria-hidden="true">
+      {Array.from({ length: 4 }, (_, i) => (
+        <div key={i} className="catalog-skeleton__card" />
+      ))}
+    </div>
+  );
+}
+
 export function CatalogPage() {
   useDocumentTitle('Bancada');
+  const { data, isPending, isError, error, refetch, isFetching } = useProducts();
+  const groups = data ? groupByCategory(data) : [];
+
   return (
-    <div className="container hero-test">
-      <h1 className="display">
-        Bancada
-        <span>no ar.</span>
-      </h1>
-      <p className="page-meta">Catálogo · tarefa T14</p>
-      <p className="page-note" style={{ marginTop: 'var(--space-6)' }}>
-        O catálogo, o hero e a grade de produtos entram na tarefa T14.
-      </p>
-      <div style={{ marginTop: 'var(--space-6)' }}>
-        <ButtonLink to="/carrinho">Ver carrinho</ButtonLink>
+    <>
+      <Hero categories={groups.map((g) => g.category)} />
+      <Manifesto />
+      <div id="catalogo" tabIndex={-1} className="catalog">
+        <p className="visually-hidden" role="status">
+          {isPending ? 'Carregando produtos…' : ''}
+        </p>
+        {isPending ? <CatalogSkeleton /> : null}
+
+        {isError ? (
+          <div className="container catalog-message" role="alert">
+            <h2>
+              {error instanceof NetworkError
+                ? 'A API está fora do ar'
+                : 'Não foi possível carregar o catálogo'}
+            </h2>
+            <p>
+              {error instanceof NetworkError
+                ? 'Não conseguimos falar com o servidor. Verifique sua conexão e tente de novo.'
+                : 'Algo deu errado do nosso lado. Tente de novo em instantes.'}
+            </p>
+            <Button onClick={() => void refetch()} disabled={isFetching}>
+              {isFetching ? 'Tentando…' : 'Tentar de novo'}
+            </Button>
+          </div>
+        ) : null}
+
+        {data && data.length === 0 ? (
+          <div className="container catalog-message">
+            <h2>Nenhum produto por aqui</h2>
+            <p>O catálogo está vazio no momento. Volte em breve.</p>
+          </div>
+        ) : null}
+
+        {groups.map((group, index) => (
+          <CategorySection key={group.category} group={group} index={index} />
+        ))}
       </div>
-    </div>
+    </>
   );
 }

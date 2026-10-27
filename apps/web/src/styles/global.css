@@ -6,6 +6,18 @@
   font-display: swap;
 }
 
+/* Fonte reserva com largura ajustada à Clash Grotesk 700 (medida: ORGANIZADA. = 6,22 em; Arial Bold
+   = 6,6 em, logo ~94%): o título não estoura nem salta quando a fonte real carrega (font-display: swap). */
+@font-face {
+  font-family: 'Clash Grotesk Fallback';
+  src: local('Arial Bold'), local('Arial'), local('Helvetica Neue'), local('Helvetica');
+  font-weight: 700;
+  size-adjust: 94%;
+  ascent-override: 92%;
+  descent-override: 22%;
+  line-gap-override: 0%;
+}
+
 @font-face {
   font-family: 'General Sans';
   src: url('../assets/fonts/GeneralSans-Variable.woff2') format('woff2');
@@ -66,12 +78,23 @@ h1,
 h2,
 h3,
 h4 {
+  /* line-height 0.85 encosta/corta acentos de maiúsculas (Á, Ç, Ã): o padding-top compensa. */
+  padding-top: 0.14em;
   font-family: var(--font-display);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: -0.04em;
+  word-spacing: 0.08em;
   line-height: 0.85;
   text-wrap: balance;
+}
+
+/* Títulos pequenos (h2/h3 em 20-32px): -0.04em cola as palavras; aperta menos e dá respiro. */
+h2,
+h3,
+h4 {
+  letter-spacing: -0.025em;
+  word-spacing: 0.14em;
 }
 
 h1 {
@@ -95,7 +118,9 @@ h3 {
   color: var(--muted); /* só sobre paper: sobre mat o contraste é 1,9 */
 }
 
+/* Títulos gigantes: line-height 0.85 corta/encosta acentos de maiúsculas (Á, Ç, Ã): padding-block compensa. */
 .display {
+  padding-block: 0.14em 0.02em;
   font-family: var(--font-display);
   font-weight: 700;
   text-transform: uppercase;
@@ -144,6 +169,16 @@ h3 {
 .link:focus-visible::after,
 .link[aria-current='page']::after {
   transform: scaleX(1);
+}
+
+/* <button class="link">: sem o visual padrão do navegador. */
+button.link {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
 }
 
 /* Link no meio de um texto corrido: sublinhado sempre visível (não depende só de cor). */

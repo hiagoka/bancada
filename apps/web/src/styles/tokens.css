@@ -12,7 +12,7 @@
   --danger: #b3402a;
   --ok: #2e7d57;
 
-  --font-display: 'Clash Grotesk', 'Arial Narrow', Arial, sans-serif;
+  --font-display: 'Clash Grotesk', 'Clash Grotesk Fallback', Arial, sans-serif;
   --font-body: 'General Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono Variable', ui-monospace, 'SFMono-Regular', Menlo, monospace;
 

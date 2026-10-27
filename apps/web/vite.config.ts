@@ -11,7 +11,9 @@ export default defineConfig({
   preview: { host: true, port: 5173, strictPort: true },
   test: {
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.{ts,tsx}'],
+    // Testes de componente pedem `// @vitest-environment jsdom` no topo do arquivo.
+    setupFiles: ['src/test/setup.ts'],
     // Os testes usam o código-fonte do contracts: não dependem de ele estar compilado.
     alias: {
       '@bancada/contracts': resolve(import.meta.dirname, '../../packages/contracts/src/index.ts'),

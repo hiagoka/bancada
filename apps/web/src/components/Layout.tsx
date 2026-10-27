@@ -1,13 +1,12 @@
 import { useRef, type MouseEvent } from 'react';
 import { Link, Outlet } from 'react-router';
 import { useFocusMainOnNavigation } from '../lib/useFocusMainOnNavigation';
+import { selectTotalItems, useCartStore } from '../features/cart/cartStore';
 import { AppLink } from './AppLink';
 import { Footer } from './Footer';
+import { LiveRegion } from './LiveRegion';
 import { Noise } from './Noise';
 import './layout.css';
-
-// Até a T14 (carrinho de verdade), o contador é um valor fixo.
-const CART_COUNT_PLACEHOLDER = 0;
 
 export const itemsLabel = (count: number): string =>
   `${count} ${count === 1 ? 'item' : 'itens'} no carrinho`;
@@ -23,6 +22,7 @@ export function focusMain(event: MouseEvent<HTMLAnchorElement>): void {
 export function Layout() {
   const mainRef = useRef<HTMLElement>(null);
   useFocusMainOnNavigation(mainRef);
+  const cartCount = useCartStore(selectTotalItems);
   return (
     <div className="app">
       <a className="skip-link" href="#conteudo" onClick={focusMain}>
@@ -43,8 +43,8 @@ export function Layout() {
               <AppLink to="/carrinho">
                 Carrinho
                 <span className="cart-count">
-                  <span aria-hidden="true">{CART_COUNT_PLACEHOLDER}</span>
-                  <span className="visually-hidden">{itemsLabel(CART_COUNT_PLACEHOLDER)}</span>
+                  <span aria-hidden="true">{cartCount}</span>
+                  <span className="visually-hidden">{itemsLabel(cartCount)}</span>
                 </span>
               </AppLink>
             </li>
@@ -55,6 +55,7 @@ export function Layout() {
         <Outlet />
       </main>
       <Footer />
+      <LiveRegion />
       <Noise />
     </div>
   );
