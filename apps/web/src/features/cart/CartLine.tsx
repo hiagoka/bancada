@@ -6,7 +6,7 @@ import { maxQuantityFor, useCartStore, type CartLine as CartLineData } from './c
 
 // Uma linha do carrinho: imagem pequena, nome, preço unitário, quantidade (- / campo / +), remover
 // e subtotal. Os limites vêm do estoque do snapshot do produto.
-export function CartLine({ line }: { line: CartLineData }) {
+export function CartLine({ line, locked = false }: { line: CartLineData; locked?: boolean }) {
   const { product, quantity } = line;
   const setQuantity = useCartStore((state) => state.setQuantity);
   const remove = useCartStore((state) => state.remove);
@@ -47,6 +47,7 @@ export function CartLine({ line }: { line: CartLineData }) {
           type="button"
           className="qty-button"
           aria-label={`Diminuir quantidade de ${product.name}`}
+          disabled={locked}
           aria-disabled={quantity <= 1}
           onClick={() => {
             if (quantity > 1) change(quantity - 1);
@@ -61,6 +62,7 @@ export function CartLine({ line }: { line: CartLineData }) {
           min={1}
           max={max}
           step={1}
+          disabled={locked}
           aria-label={`Quantidade de ${product.name}`}
           value={draft ?? String(quantity)}
           onChange={(event) => setDraft(event.target.value)}
@@ -73,6 +75,7 @@ export function CartLine({ line }: { line: CartLineData }) {
           type="button"
           className="qty-button"
           aria-label={`Aumentar quantidade de ${product.name}`}
+          disabled={locked}
           aria-disabled={quantity >= max}
           onClick={() => {
             if (quantity < max) change(quantity + 1);
@@ -89,6 +92,7 @@ export function CartLine({ line }: { line: CartLineData }) {
         type="button"
         className="cart-line__remove link"
         aria-label={`Remover ${product.name} do carrinho`}
+        disabled={locked}
         onClick={() => {
           remove(product.id);
           announce(`${product.name} removido do carrinho.`);

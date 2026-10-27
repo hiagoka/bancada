@@ -1,7 +1,10 @@
+import { useIsMutating } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { ButtonLink } from '../../components/Button';
 import { formatPrice } from '../../lib/format';
 import { useDocumentTitle } from '../../lib/useDocumentTitle';
+import { CheckoutForm } from '../checkout/CheckoutForm';
+import { CREATE_ORDER_MUTATION_KEY } from '../checkout/useCreateOrder';
 import { useProducts } from '../catalog/useProducts';
 import { CartLine } from './CartLine';
 import { selectSubtotalCents, selectTotalItems, useCartStore, type CartChange } from './cartStore';
@@ -29,6 +32,8 @@ export function CartPage() {
   const sync = useCartStore((state) => state.syncWithCatalog);
   const dismiss = useCartStore((state) => state.dismissNotices);
   const { data: products, isError } = useProducts({ refetchOnMount: 'always' });
+  // Enquanto o pedido está sendo criado, quantidade e remover ficam travados.
+  const submitting = useIsMutating({ mutationKey: CREATE_ORDER_MUTATION_KEY }) > 0;
 
   // Quando o catálogo chega, confere o carrinho com o estoque e os preços de agora.
   useEffect(() => {
@@ -69,7 +74,7 @@ export function CartPage() {
         <>
           <ul className="cart-lines">
             {lines.map((line) => (
-              <CartLine key={line.product.id} line={line} />
+              <CartLine key={line.product.id} line={line} locked={submitting} />
             ))}
           </ul>
 
@@ -84,16 +89,7 @@ export function CartPage() {
             </div>
           </dl>
 
-          {/* T15: o formulário de checkout (RHF + zodResolver) e o botão "Pagar R$ ..." entram AQUI.
-              Nada de pedido é criado nesta tarefa. */}
-          <section
-            className="checkout-slot"
-            aria-labelledby="checkout-slot-title"
-            data-testid="checkout-slot"
-          >
-            <h2 id="checkout-slot-title">Finalizar compra</h2>
-            <p className="muted">O formulário de pagamento chega na próxima etapa (T15).</p>
-          </section>
+          <CheckoutForm />
         </>
       )}
     </div>

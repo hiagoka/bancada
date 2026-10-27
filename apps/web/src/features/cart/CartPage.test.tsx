@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchProducts } from '../../api/products';
 import { makeProduct } from '../../test/fixtures';
 import { CartPage } from './CartPage';
@@ -11,6 +11,8 @@ import { useCartStore } from './cartStore';
 
 vi.mock('../../api/products', () => ({ fetchProducts: vi.fn() }));
 const mockFetch = vi.mocked(fetchProducts);
+
+afterEach(() => vi.restoreAllMocks());
 
 beforeEach(() => {
   mockFetch.mockReset();
@@ -44,18 +46,52 @@ describe('CartPage', () => {
     expect(screen.queryByTestId('checkout-slot')).toBeNull();
   });
 
-  it('com itens: linhas, total em reais e o lugar do checkout (T15), sem criar pedido', () => {
+  it('com itens: linhas, total em reais e o formulário de checkout (nome, e-mail e "Pagar R$ total")', () => {
     const a = makeProduct({ name: 'Mouse', priceCents: 24900, stock: 9 });
     const b = makeProduct({ name: 'Caneca', priceCents: 4900, stock: 9 });
     useCartStore.getState().add(a, 2);
     useCartStore.getState().add(b, 1);
     renderCart([a, b]);
     expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(
-      expect.arrayContaining(['Mouse', 'Caneca']),
+      expect.arrayContaining(['Mouse', 'Caneca', 'Finalizar compra']),
     );
-    expect(screen.getByText(/R\$\s?547,00/)).toBeTruthy(); // 2 × 249 + 49 = 547
+    expect(screen.getAllByText(/R\$\s?547,00/).length).toBeGreaterThanOrEqual(2); // 2 × 249 + 49 = 547
     expect(screen.getByTestId('checkout-slot')).toBeTruthy();
-    expect(screen.queryByRole('textbox')).toBeNull(); // nenhum campo de formulário ainda
+    expect(screen.getByLabelText('Nome')).toBeTruthy();
+    expect(screen.getByLabelText('E-mail')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Pagar R\$\s?547,00$/ })).toBeTruthy();
+  });
+
+  it('durante o envio do pedido, quantidade e remover ficam desabilitados', async () => {
+    const product = makeProduct({ name: 'Mouse', stock: 9 });
+    useCartStore.getState().add(product, 2);
+    let release!: (r: Response) => void;
+    const gate = new Promise<Response>((resolve) => (release = resolve));
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => gate);
+    renderCart([product]);
+
+    await userEvent.type(screen.getByLabelText('Nome'), 'Ana Souza');
+    await userEvent.type(screen.getByLabelText('E-mail'), 'ana@example.com');
+    await userEvent.click(screen.getByRole('button', { name: /^Pagar/ }));
+
+    const plus = await screen.findByRole('button', { name: 'Aumentar quantidade de Mouse' });
+    await waitFor(() => expect((plus as HTMLButtonElement).disabled).toBe(true));
+    expect(
+      (screen.getByRole('button', { name: 'Diminuir quantidade de Mouse' }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect((screen.getByRole('spinbutton') as HTMLInputElement).disabled).toBe(true);
+    expect(
+      (screen.getByRole('button', { name: 'Remover Mouse do carrinho' }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+
+    release(
+      new Response(JSON.stringify({ error: { code: 'INTERNAL_ERROR', message: 'x' } }), {
+        status: 500,
+      }),
+    );
+    await waitFor(() => expect((plus as HTMLButtonElement).disabled).toBe(false));
   });
 
   it('ao chegar o catálogo, ajusta a quantidade ao estoque e avisa (role=status)', async () => {

@@ -178,11 +178,9 @@
   font-weight: 700;
 }
 
-/* Lugar do formulário de checkout (T15). */
-.checkout-slot {
-  margin-top: var(--space-12);
-  padding: var(--space-6);
-  border: var(--border) dashed var(--ink);
-  display: grid;
-  gap: var(--space-3);
+/* Controles travados enquanto o pedido está sendo criado. */
+.cart-line__remove:disabled,
+.qty-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }

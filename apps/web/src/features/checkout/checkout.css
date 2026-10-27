@@ -1,0 +1,115 @@
+.checkout {
+  margin-top: var(--space-12);
+  padding: var(--space-6);
+  border: var(--border) solid var(--ink);
+  display: grid;
+  gap: var(--space-6);
+}
+
+.checkout h2 {
+  font-size: var(--text-2xl);
+}
+
+.checkout-summary ul {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.checkout-summary li,
+.checkout-summary__total {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.checkout-summary li > span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.checkout-summary__total {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--ink);
+  font-weight: 700;
+}
+
+.checkout-form {
+  display: grid;
+  gap: var(--space-4);
+  max-width: 32rem;
+}
+
+.field {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.field label {
+  font-family: var(--font-display);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: -0.01em;
+  word-spacing: 0.1em;
+  font-size: var(--text-sm);
+}
+
+.field input {
+  min-height: 2.75rem;
+  padding: var(--space-2) var(--space-3);
+  border: var(--border) solid var(--ink);
+  border-radius: 0;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.field input[aria-invalid='true'] {
+  border-color: var(--danger);
+  border-width: 3px;
+}
+
+/* Texto de erro em --ink (o --danger só vale em texto grande ou com ícone): o marcador danger
+   ao lado e o negrito destacam sem depender de cor. */
+.field-error {
+  padding-left: var(--space-3);
+  border-left: 4px solid var(--danger);
+  font-weight: 700;
+  font-size: var(--text-sm);
+}
+
+.checkout-submit {
+  justify-self: start;
+}
+
+.checkout-note {
+  font-size: var(--text-sm);
+}
+
+.checkout-alert {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+  padding: var(--space-4);
+  border: var(--border) solid var(--ink);
+  border-left-width: 8px;
+  border-left-color: var(--danger);
+  background: var(--paper);
+}
+
+.checkout-alert:focus {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.checkout-alert ul {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: var(--space-1);
+}
+
+.checkout-alert__title {
+  font-weight: 700;
+}
