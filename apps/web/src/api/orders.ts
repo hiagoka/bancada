@@ -15,3 +15,8 @@ export function createOrder(input: CreateOrderInput, idempotencyKey: string): Pr
     schema: publicOrderSchema,
   });
 }
+
+// GET /orders/:id (público: sem dados do cliente). O id é codificado na URL.
+export function getOrder(id: string, signal?: AbortSignal): Promise<PublicOrder> {
+  return request(`/orders/${encodeURIComponent(id)}`, { schema: publicOrderSchema, signal });
+}

@@ -1,0 +1,248 @@
+/* ---------- Página do pedido e checkout simulado ---------- */
+.order-page {
+  display: grid;
+  gap: var(--space-6);
+  align-content: start;
+}
+
+.order-page .page-title {
+  margin-bottom: 0;
+  overflow-wrap: anywhere;
+}
+
+.order-page__id {
+  font-size: var(--text-sm);
+}
+
+.order-skeleton {
+  height: 12rem;
+  border: var(--border) solid var(--ink);
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+/* Selo de status: o TEXTO é o principal; borda e fundo só reforçam (nunca tape como texto). */
+.status-pill {
+  display: inline-block;
+  justify-self: start;
+  padding: var(--space-2) var(--space-4);
+  border: var(--border) solid var(--ink);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--text-lg);
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+}
+
+.status-pill--pending {
+  background: var(--tape);
+  color: var(--ink);
+}
+
+.status-pill--paid {
+  background: var(--ok);
+  color: var(--paper);
+  border-color: var(--ok);
+}
+
+.status-pill--cancelled {
+  background: var(--paper);
+  color: var(--ink);
+  border-style: dashed;
+}
+
+.status-pill--refunded {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+/* Tracker: forma + texto em cada etapa. */
+.tracker {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+}
+
+@media (min-width: 640px) {
+  .tracker {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.tracker__step {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas:
+    'icon label'
+    'icon state';
+  column-gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-3);
+  border: var(--border) solid var(--ink);
+}
+
+.tracker__icon {
+  grid-area: icon;
+  display: grid;
+}
+
+.tracker__label {
+  grid-area: label;
+  font-family: var(--font-display);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: -0.02em;
+  word-spacing: 0.1em;
+}
+
+.tracker__state {
+  grid-area: state;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.tracker__step--current {
+  border-width: 4px;
+}
+
+.tracker__step--upcoming {
+  border-style: dashed;
+  color: var(--muted);
+}
+
+.tracker__step--failed {
+  border-style: double;
+  border-width: 5px;
+}
+
+/* Painel de ação / mensagem do status */
+.order-panel {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+  padding: var(--space-4);
+  border: var(--border) solid var(--ink);
+  max-width: 40rem;
+}
+
+.order-panel--ok {
+  border-left-width: 8px;
+  border-left-color: var(--ok);
+}
+
+.order-summary h2 {
+  font-size: var(--text-xl);
+  margin-bottom: var(--space-3);
+}
+
+.order-items {
+  list-style: none;
+  padding: 0;
+  border-top: var(--border) solid var(--ink);
+}
+
+.order-items li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'name subtotal'
+    'qty subtotal';
+  gap: var(--space-1) var(--space-4);
+  padding-block: var(--space-3);
+  border-bottom: 1px solid var(--ink);
+}
+
+.order-items__name {
+  grid-area: name;
+  overflow-wrap: anywhere;
+}
+
+.order-items__qty {
+  grid-area: qty;
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
+.order-items__subtotal {
+  grid-area: subtotal;
+  align-self: center;
+  font-weight: 700;
+}
+
+.order-total {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-top: var(--space-3);
+  font-size: var(--text-xl);
+  font-weight: 700;
+}
+
+.order-dates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+}
+
+.order-dates dt {
+  font-size: var(--text-xs);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.order-note {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+/* ---------- Checkout simulado ---------- */
+/* Faixa bem visível: tape sobre mat (7,05:1), nunca sobre paper. */
+.sim-banner {
+  border-bottom: 4px solid var(--tape);
+  padding-block: var(--space-4);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--text-lg);
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+  word-spacing: 0.1em;
+}
+
+.sim-banner strong {
+  color: var(--tape);
+}
+
+.sim-actions h2 {
+  font-size: var(--text-xl);
+  margin-bottom: var(--space-3);
+}
+
+.sim-actions ul {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: var(--space-4);
+  max-width: 32rem;
+}
+
+.sim-actions li {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+}
+
+.sim-actions__hint {
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
+.sim-result {
+  min-height: 1.5rem;
+  display: grid;
+  gap: var(--space-2);
+  font-weight: 700;
+}
