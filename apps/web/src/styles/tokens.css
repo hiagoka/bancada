@@ -1,0 +1,57 @@
+/* Identidade visual D25: brutalismo editorial sobre a bancada de trabalho.
+   Contraste (WCAG, medido): ink/paper 15,2 · mat/paper 10,1 · muted/paper 5,4 · ink/tape 10,6 ·
+   paper/mat 10,1 · tape/mat 7,1 · danger/paper 4,9 (só texto grande ou com ícone) ·
+   ok/paper 4,3 (só texto grande, rótulo em negrito ≥ 18px ou com ícone).
+   Proibido: tape como texto/sublinhado/foco sobre paper (1,4); muted sobre mat (1,9). */
+:root {
+  --paper: #f1ede4;
+  --ink: #15191a;
+  --mat: #1f3d36;
+  --tape: #f2c230;
+  --muted: #5a625e;
+  --danger: #b3402a;
+  --ok: #2e7d57;
+
+  --font-display: 'Clash Grotesk', 'Arial Narrow', Arial, sans-serif;
+  --font-body: 'General Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+
+  /* Espaçamento (base de 4px). --space-32 = 128px, o deslocamento da grade de produtos. */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+  --space-24: 6rem;
+  --space-32: 8rem;
+  --gutter: clamp(1rem, 4vw, 2.5rem);
+  --page-max: 90rem;
+
+  /* Tipografia */
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.25rem;
+  --text-xl: 1.5rem;
+  --text-2xl: 2rem;
+  --text-3xl: clamp(2rem, 5vw, 3rem);
+  --display-size: 16vw; /* celular */
+
+  --radius: 0;
+  --border: 2px;
+  --ease-out: cubic-bezier(0.165, 0.84, 0.44, 1);
+
+  /* Contexto de cor: .on-mat troca estes valores (ver global.css). */
+  --focus-color: var(--ink);
+  --link-color: var(--mat);
+  --noise-opacity: 0.08;
+}
+
+@media (min-width: 768px) {
+  :root {
+    --display-size: 13.5vw; /* desktop */
+  }
+}
