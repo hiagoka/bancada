@@ -264,16 +264,25 @@ Estado:
 - RequireAdmin: usa useMe(); se der 401, redireciona para /admin/login guardando a página pedida para voltar depois do login.
 - Upload: valida tipo (jpg, png, webp) e tamanho (2 MB) no cliente antes de pedir a URL; mostra progresso e pré-visualização.
 
-Identidade visual:
-- Ideia: base de corte quadriculada de bancada de trabalho, com régua/fita métrica.
-- Cores (tokens CSS): --mat #2F5D50, --mat-deep #24493F, --paper #F6F7F4 (fundo), --ink #18211E (texto), --muted #5B6863, --line #D6DCD8, --tape #F2C230 (botão principal, texto ink), --danger #B3402A, --ok #2E7D57.
-- Tipografia: só Archivo Variable (@fontsource-variable/archivo/wdth.css). Títulos com font-stretch 125% e peso 800; texto em largura normal. Preços com tabular-nums.
-- Loja: hero com fundo verde quadriculado (grade fina de 16px e grade forte de 80px) e régua amarela na base; é o ÚNICO elemento chamativo. O resto é discreto: bordas de 1px, raio de 10px, sem sombras, sem gradientes decorativos.
-- Header verde escuro com "Bancada" e o link do carrinho com contador amarelo.
-- Produto sem imagem mostra um ícone SVG em traço da categoria sobre o fundo verde quadriculado.
-- Admin: mesmos tokens, sem o hero; header "Bancada · Admin" com links Produtos e Pedidos e botão "Sair". Tabelas limpas, status com etiqueta (ativo em verde, inativo em cinza).
-- Funciona a partir de 360px de largura, foco visível, label em todo input, erros com role="alert", prefers-reduced-motion respeitado.
-- Textos da interface em PT-BR, sentence case; botões dizem o que fazem ("Pagar R$ 279,70", "Salvar produto", não "Enviar").
+Identidade visual (D25): brutalismo editorial sobre a bancada de trabalho.
+- Ideia: base de corte verde, fita métrica amarela e papel cru; títulos enormes e apertados, grade assimétrica, bordas retas (radius 0), sem sombras e sem gradientes decorativos.
+- Cores (tokens CSS): --paper #F1EDE4 (fundo), --ink #15191A (texto e bordas), --mat #1F3D36 (superfície escura, base de corte), --tape #F2C230 (ação e selos), --muted #5A625E (texto de apoio), --danger #B3402A, --ok #2E7D57.
+- Regras de contraste (obrigatórias): --tape SÓ como fundo com texto --ink (10,6:1); nunca como cor de texto, sublinhado ou foco sobre --paper (1,4:1). Sobre --mat, --tape como texto, sublinhado ou foco é permitido (7:1). Texto de apoio sempre --muted ou mais escuro. --danger só em texto grande ou com ícone.
+- Tipografia: Clash Grotesk (Fontshare, gratuita) 700 nos títulos, em maiúsculas, letter-spacing -0.04em e line-height 0.85; General Sans para o texto; JetBrains Mono (@fontsource-variable/jetbrains-mono) para preços, quantidades e metadados, com tabular-nums. As fontes do Fontshare são baixadas e hospedadas no próprio apps/web (woff2 em src/assets/fonts, font-display: swap), sem CDN externo.
+- Textura: ruído de grão fixo (div fixed 100vw/100vh, pointer-events none, z-index 50, opacity 0.08, mix-blend-mode multiply) feito com imagem de ruído pequena e repetida, NÃO com filtro SVG ao vivo na tela inteira (pesa em celular). No admin a opacidade cai para 0.04.
+- Navegação: sticky, fundo --mat com texto --paper (sem mix-blend-mode, para manter o contraste). Marca "BANCADA" em maiúsculas à esquerda; links Catálogo e Carrinho; o carrinho tem contador quadrado em --tape com texto --ink. Sem busca.
+- Hero (só na loja): min-height 85svh, fundo --mat, imagem ou ilustração em escala de cinza a 60% de opacidade, conteúdo alinhado à base com borda fina --paper, metadados em mono com letter-spacing largo (categorias da loja), botão "Ver catálogo" em --tape e uma régua de fita métrica (marcas amarelas) na base. Título dividido e recuado ("MESA / ORGANIZADA.", segunda linha recuada 20vw, em --tape), 16vw no celular e 13.5vw no desktop. É o ÚNICO elemento chamativo; o resto é sóbrio.
+- Manifesto: grade de 12 colunas; colunas 1-4 com rótulo "Manifesto" sobre uma borda superior; colunas 5-12 com texto grande (32 a 48px) em maiúsculas, recuo de ~3rem na primeira linha e frases-chave em --mat.
+- Divisor de categoria: faixa de largura total entre bordas --ink, com o nome da categoria (TECLADOS, MOUSES...) a 12vw em --mat, espaçamento vertical mínimo (efeito de faixa).
+- Grade de produtos: 12 colunas assimétricas (7 e 5 colunas alternadas, o segundo item com deslocamento vertical de 128px no desktop); no celular, 1 coluna sem deslocamento. Título em maiúsculas e negrito, preço em mono, separados por borda inferior de 2px --ink que vira --mat no hover. Imagens em escala de cinza com alto contraste; hover com scale 1.05 (só com hover real e sem prefers-reduced-motion).
+- Selo de status (componente): retângulo sem raio, fundo --tape, texto 10px negrito maiúsculo --ink, no canto superior direito do card ("Últimas 3 un.", "Esgotado"). No desktop aparece no hover com transição de 300ms; em telas sem hover (celular) fica sempre visível.
+- Links: sublinhado de 2px que cresce de 0 a 1 (cubic-bezier(0.165, 0.84, 0.44, 1)); em --mat sobre --paper e em --tape sobre --mat. Foco visível: outline de 2px --ink com offset de 2px sobre --paper e --tape sobre --mat.
+- Botões: retângulo sem raio, texto maiúsculo negrito; primário em --tape com texto --ink; hover inverte para --mat com texto --paper.
+- Produto sem imagem: ícone SVG em traço da categoria sobre fundo --mat quadriculado (grade fina de 16px e grade forte de 80px).
+- Rodapé: 4 colunas sobre --paper (marca, loja, pagamento, sobre; títulos em maiúsculas 20px), bloco escuro --mat com como pagar (Mercado Pago e modo simulado), e o nome "BANCADA" enorme (8vw) em tom fantasma (--ink a 8% de opacidade) no final. Sem newsletter (e-mails estão fora do escopo).
+- Admin: mesmos tokens e fontes, sem hero e com ruído a 0.04; header "Bancada · Admin" em --mat com links Produtos e Pedidos e botão "Sair". Tabelas limpas com bordas de 1px --ink, números em mono, status com etiqueta (ativo em --ok, inativo em cinza), densidade maior que a loja.
+- Funciona a partir de 360px de largura, foco visível, label em todo input, erros com role="alert", prefers-reduced-motion respeitado (sem scale, sem transição de selo e sem animação de sublinhado).
+- Textos da interface em PT-BR; títulos e rótulos em maiúsculas via CSS (text-transform), o conteúdo no código em sentence case; botões dizem o que fazem ("Pagar R$ 279,70", "Salvar produto", não "Enviar").
 
 ========================================
 10. INFRA
@@ -355,6 +364,7 @@ D21 Auth, detalhes de implementação: (a) o CSRF roda ANTES do parser de JSON (
 D22 Admin, detalhes de implementação: (a) o slug é imutável (editar o nome não o muda); (b) POST e PATCH de produto são estritos: campos desconhecidos (stock, slug, active na criação) dão 400, corpo vazio no PATCH dá 400; (c) imageKey deve casar products/<uuid>.(jpg|png|webp); a existência do objeto no bucket não é conferida (T12 pode conferir); (d) GET /admin/orders tem pageSize fixo de 20 e devolve {items, page, pageSize, total}; (e) cancellable é calculado no servidor (PENDING e created_at < agora - 30 min); created_at vem do relógio do banco e o "agora" do Node, então uma diferença de segundos entre eles desloca a janela (citar no README); (f) nota em branco no ajuste de estoque vira NULL; (g) só o estoque tem livro-razão: edição de preço e de active não guardam autor (próximo passo).
 D23 Upload, detalhes de implementação: (a) key products/<uuid v4>.<jpg|png|webp>; (b) o S3 só impõe o contentType DECLARADO e o tamanho (0 a 2 MB), não valida o conteúdo real do arquivo; (c) variáveis S3_* têm padrão do MinIO local fora de produção e são obrigatórias em produção (exceto S3_ENDPOINT); (d) testes de integração reais contra o MinIO pulam com aviso se ele não responder, mas FALHAM com REQUIRE_MINIO=true (o CI define); (e) bucket real da AWS precisa de CORS (AllowedOrigins = WEB_URL, AllowedMethods = POST, AllowedHeaders = *, ExposeHeaders = ETag) e leitura pública dos objetos ou CloudFront; (f) credenciais fixas obrigatórias em produção impedem IAM role (revisar na T23); (g) a existência do objeto não é conferida ao salvar o produto.
 D24 S3 local: as imagens oficiais minio/minio e minio/mc foram removidas do Docker Hub e do Quay (o MinIO parou de publicá-las). Usamos o fork mantido pgsty/minio e pgsty/mc, com a mesma API S3; o código só fala S3 (D10), então trocar de provedor local não muda nada além do docker-compose. O CI sobe minio e minio-init pelo docker-compose, o que também prova o compose.
+D25 Identidade visual brutalista editorial (inspirada no estilo "Season 04" enviado pelo autor, com paleta própria: verde de base de corte #1F3D36 e amarelo de fita métrica #F2C230 sobre papel #F1EDE4). Substitui a identidade anterior (Archivo Variable, raio de 10px, hero quadriculado). Desvios deliberados do estilo de referência, por acessibilidade e escopo: o neon não existe aqui (o amarelo só vale como fundo com texto escuro sobre claro), a navegação não usa mix-blend-mode, o ruído é imagem estática e não filtro ao vivo, não há busca, Editorial nem newsletter, e o selo Quick View vira selo de status.
 Mudança de arquitetura só registrando uma nova decisão aqui.
 
 ========================================
@@ -392,7 +402,7 @@ T11 [api] Produtos e estoque do admin (8.6) + lista de pedidos + POST /admin/ord
 T12 [api] StorageService + rota de upload (8.7). Aceite: testes de upload; upload real funcionando no MinIO local.
 
 Fase 4 · Loja (web)
-T13 [web] Esqueleto: Vite, router, QueryClient, Layout, tokens.css, cliente http com credentials, header X-Requested-With: bancada-web e ApiError.
+T13 [web] Esqueleto: Vite, router, QueryClient, Layout, tokens.css (seção 9, D25: paleta, fontes Clash Grotesk/General Sans hospedadas + JetBrains Mono, textura de ruído), cliente http com credentials, header X-Requested-With: bancada-web e ApiError.
 T14 [web] Catálogo e carrinho (Zustand + persist), com ProductImage. Aceite: respeita o estoque, sobrevive ao F5, sem rolagem horizontal em 360px.
 T15 [web] Checkout com RHF + contracts e Idempotency-Key estável. Aceite: duplo clique gera um pedido só; ao dar certo, limpa o carrinho e redireciona.
 T16 [web] Página do pedido com polling e checkout simulado. Aceite: fluxo completo catálogo -> carrinho -> simulado -> pedido pago.

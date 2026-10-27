@@ -23,7 +23,7 @@ Uma tarefa por vez (api e web podem andar em paralelo quando não dependem uma d
 - [x] **T12** [api] StorageService + rota de upload (8.7). Aceite: testes de upload; upload real funcionando no MinIO local.
 
 ## Fase 4 · Loja (web)
-- [ ] **T13** [web] Esqueleto: Vite, router, QueryClient, Layout, tokens.css, cliente http com credentials, header X-Requested-With: bancada-web e ApiError.
+- [ ] **T13** [web] Esqueleto: Vite, router, QueryClient, Layout, tokens.css (seção 9, D25: paleta, fontes Clash Grotesk/General Sans hospedadas + JetBrains Mono, textura de ruído), cliente http com credentials, header X-Requested-With: bancada-web e ApiError.
 - [ ] **T14** [web] Catálogo e carrinho (Zustand + persist), com ProductImage. Aceite: respeita o estoque, sobrevive ao F5, sem rolagem horizontal em 360px.
 - [ ] **T15** [web] Checkout com RHF + contracts e Idempotency-Key estável. Aceite: duplo clique gera um pedido só; ao dar certo, limpa o carrinho e redireciona.
 - [ ] **T16** [web] Página do pedido com polling e checkout simulado. Aceite: fluxo completo catálogo -> carrinho -> simulado -> pedido pago.
