@@ -1,7 +1,8 @@
 import { Navigate, createBrowserRouter } from 'react-router';
 import { Layout } from '../components/Layout';
-import { AdminLayout } from '../features/admin/AdminLayout';
+import { AdminLayout, AdminLoginLayout } from '../features/admin/AdminLayout';
 import { LoginPage } from '../features/admin/LoginPage';
+import { RequireAdmin } from '../features/admin/RequireAdmin';
 import { OrdersListPage } from '../features/admin/OrdersListPage';
 import { ProductFormPage } from '../features/admin/ProductFormPage';
 import { ProductsListPage } from '../features/admin/ProductsListPage';
@@ -13,27 +14,37 @@ import { NotFoundPage } from './NotFoundPage';
 
 export const routes = [
   {
-    // Loja (e o login do admin, que não usa o AdminLayout).
+    // Loja.
     element: <Layout />,
     children: [
       { index: true, element: <CatalogPage /> },
       { path: 'carrinho', element: <CartPage /> },
       { path: 'pedido/:id', element: <OrderPage /> },
       { path: 'checkout-simulado/:id', element: <FakeCheckoutPage /> },
-      { path: 'admin/login', element: <LoginPage /> },
     ],
   },
   {
-    // Admin (a T17 adiciona o RequireAdmin em volta).
+    // Login do admin: casca própria, fora do RequireAdmin.
+    path: 'admin/login',
+    element: <AdminLoginLayout />,
+    children: [{ index: true, element: <LoginPage /> }],
+  },
+  {
+    // Admin: tudo sob o RequireAdmin (sem sessão, vai ao login guardando a página pedida).
     path: 'admin',
-    element: <AdminLayout />,
+    element: <RequireAdmin />,
     children: [
-      { index: true, element: <Navigate to="/admin/produtos" replace /> },
-      { path: 'produtos', element: <ProductsListPage /> },
-      { path: 'produtos/novo', element: <ProductFormPage /> },
-      { path: 'produtos/:id', element: <ProductFormPage /> },
-      { path: 'pedidos', element: <OrdersListPage /> },
-      { path: '*', element: <NotFoundPage /> },
+      {
+        element: <AdminLayout />,
+        children: [
+          { index: true, element: <Navigate to="/admin/produtos" replace /> },
+          { path: 'produtos', element: <ProductsListPage /> },
+          { path: 'produtos/novo', element: <ProductFormPage /> },
+          { path: 'produtos/:id', element: <ProductFormPage /> },
+          { path: 'pedidos', element: <OrdersListPage /> },
+          { path: '*', element: <NotFoundPage /> },
+        ],
+      },
     ],
   },
   {

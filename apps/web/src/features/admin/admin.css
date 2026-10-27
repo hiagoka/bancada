@@ -1,0 +1,84 @@
+/* Admin (T17): login, estado de acesso e nome do admin no cabeçalho. */
+.login-page {
+  display: grid;
+  gap: var(--space-6);
+  max-width: 28rem;
+}
+
+.login-form {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.login-form .field {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.login-form .field label {
+  font-family: var(--font-display);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: -0.01em;
+  word-spacing: 0.1em;
+  font-size: var(--text-sm);
+}
+
+.login-form .field input {
+  min-height: 2.75rem;
+  padding: var(--space-2) var(--space-3);
+  border: var(--border) solid var(--ink);
+  border-radius: 0;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.login-form .field input[aria-invalid='true'] {
+  border-color: var(--danger);
+  border-width: 3px;
+}
+
+.login-form .field-error,
+.login-alert {
+  padding-left: var(--space-3);
+  border-left: 4px solid var(--danger);
+  font-weight: 700;
+  font-size: var(--text-sm);
+}
+
+.login-alert {
+  padding: var(--space-3) var(--space-4);
+  border: var(--border) solid var(--ink);
+  border-left: 8px solid var(--danger);
+  background: var(--paper);
+  font-size: var(--text-base, 1rem);
+}
+
+.login-alert:focus {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.login-form .btn {
+  justify-self: start;
+}
+
+.admin-gate {
+  display: grid;
+  gap: var(--space-4);
+  justify-items: start;
+}
+
+.admin-user {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  max-width: 16rem;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 40rem) {
+  .admin-nav-actions {
+    flex-wrap: wrap;
+    gap: var(--space-3);
+  }
+}
