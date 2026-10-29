@@ -242,3 +242,11 @@
   font-weight: 700;
   font-size: var(--text-sm);
 }
+
+.admin-notice {
+  padding: var(--space-3) var(--space-4);
+  border: var(--border) solid var(--ink);
+  border-left: 8px solid var(--ok);
+  background: var(--paper);
+  font-weight: 700;
+}

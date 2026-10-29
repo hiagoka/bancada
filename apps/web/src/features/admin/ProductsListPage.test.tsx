@@ -14,11 +14,11 @@ vi.mock('../../api/adminProducts', () => ({ listAdminProducts: vi.fn() }));
 const mockList = vi.mocked(listAdminProducts);
 const user = userEvent.setup();
 
-function renderPage() {
+function renderPage(state?: { notice: string }) {
   const client = createQueryClient();
   render(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={['/admin/produtos']}>
+      <MemoryRouter initialEntries={[{ pathname: '/admin/produtos', state }]}>
         <Routes>
           <Route path="/admin/produtos" element={<ProductsListPage />} />
           <Route path="/admin/produtos/novo" element={<p>FORM NOVO</p>} />
@@ -69,6 +69,15 @@ describe('ProductsListPage', () => {
       'Estoque',
       'Situação',
     ]);
+  });
+
+  it('mostra o aviso deixado pelo formulário (role=status)', async () => {
+    mockList.mockResolvedValue([makeAdminProduct()]);
+    renderPage({ notice: 'Produto “Teclado” criado.' });
+    await screen.findByRole('table');
+    expect(
+      screen.getAllByRole('status').some((e) => e.textContent === 'Produto “Teclado” criado.'),
+    ).toBe(true);
   });
 
   it('"Novo produto" leva ao formulário de criação', async () => {

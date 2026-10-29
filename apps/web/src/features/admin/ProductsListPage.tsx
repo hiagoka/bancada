@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useLocation } from 'react-router';
 import { ApiError, NetworkError } from '../../api/http';
 import { Button, ButtonLink } from '../../components/Button';
 import { ProductImage } from '../../components/ProductImage';
@@ -13,6 +14,8 @@ type ActiveFilter = 'all' | 'true' | 'false';
 
 export function ProductsListPage() {
   useDocumentTitle('Produtos');
+  // Aviso deixado pelo formulário depois de criar/editar (location.state).
+  const notice = (useLocation().state as { notice?: string } | null)?.notice;
   const [search, setSearch] = useState('');
   const [active, setActive] = useState<ActiveFilter>('all');
   const q = useDebouncedValue(search.trim());
@@ -27,6 +30,12 @@ export function ProductsListPage() {
         <h1 className="page-title">Produtos</h1>
         <ButtonLink to="/admin/produtos/novo">Novo produto</ButtonLink>
       </div>
+
+      {notice ? (
+        <p role="status" className="admin-notice">
+          {notice}
+        </p>
+      ) : null}
 
       <div className="admin-products__filters" role="search">
         <div className="field">
