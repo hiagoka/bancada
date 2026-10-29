@@ -1,6 +1,6 @@
 import { MAX_UPLOAD_BYTES } from '@bancada/contracts';
 import { describe, expect, it, vi } from 'vitest';
-import { UploadError, uploadFileToStorage, validateImageFile, type XhrLike } from './imageUpload';
+import { UploadError, uploadFileToStorage, validateImageFile, type XhrLike } from './uploadImage';
 
 const file = (type: string, size: number, name = 'foto.png'): File => {
   const f = new File(['x'], name, { type });
