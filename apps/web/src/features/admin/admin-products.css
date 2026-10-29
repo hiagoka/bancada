@@ -1,0 +1,169 @@
+/* Lista e formulário de produtos do admin: tabela limpa, números em mono, densidade maior. */
+.admin-products {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.admin-products__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.admin-products__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.admin-products__filters .field,
+.admin-form .field {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.admin-products__filters .field {
+  flex: 1 1 14rem;
+  max-width: 24rem;
+}
+
+.admin-products .field label,
+.admin-form .field label {
+  font-family: var(--font-display);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: -0.01em;
+  word-spacing: 0.1em;
+  font-size: var(--text-sm);
+}
+
+.admin-products .field input,
+.admin-products .field select,
+.admin-form .field input,
+.admin-form .field select,
+.admin-form .field textarea {
+  min-height: 2.75rem;
+  padding: var(--space-2) var(--space-3);
+  border: var(--border) solid var(--ink);
+  border-radius: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  width: 100%;
+}
+
+.admin-form .field textarea {
+  min-height: 7rem;
+  resize: vertical;
+}
+
+.admin-form .field [aria-invalid='true'] {
+  border-color: var(--danger);
+  border-width: 3px;
+}
+
+.admin-products__count {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  min-height: 1.2em;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.admin-table th,
+.admin-table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--ink);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.admin-table thead th {
+  border-bottom-width: 2px;
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  font-size: var(--text-xs);
+}
+
+.admin-table .num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.admin-table__thumb {
+  width: 3rem;
+  height: 3rem;
+}
+
+.admin-table__name {
+  font-weight: 700;
+}
+
+/* Etiquetas com TEXTO (a cor sozinha não informa): ativo em --ok, inativo em cinza. */
+.tag {
+  display: inline-block;
+  padding: 0 var(--space-2);
+  border: 1px solid currentColor;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+}
+
+.tag--ok {
+  background: var(--ok);
+  border-color: var(--ok);
+  color: var(--paper);
+}
+
+.tag--off {
+  color: var(--muted);
+  border-style: dashed;
+}
+
+/* Telas estreitas: cada linha vira um bloco com rótulo, sem rolagem horizontal. */
+@media (max-width: 40rem) {
+  .admin-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .admin-table,
+  .admin-table tbody,
+  .admin-table tr,
+  .admin-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .admin-table tr {
+    padding: var(--space-3) 0;
+    border-bottom: 2px solid var(--ink);
+  }
+
+  .admin-table td {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-4);
+    border-bottom: 0;
+    text-align: right;
+    overflow-wrap: anywhere;
+  }
+
+  .admin-table td::before {
+    content: attr(data-label);
+    font-family: var(--font-display);
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: var(--text-xs);
+    text-align: left;
+  }
+}
