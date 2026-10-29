@@ -18,3 +18,10 @@ Leia `ARCHITECTURE.md` (fonte da verdade) antes de qualquer tarefa. O andamento 
 - Sem `any` (TypeScript strict).
 - Sem segredos commitados (.env, credenciais); logs com Pino, nunca `console.log`.
 - Pronto = typecheck, lint e testes verdes.
+
+## Commits
+
+- Faça o máximo de commits pequenos e coesos possível: um por passo lógico (migração, repositório, rota, testes, componente, documentação), nunca um commit único gigante por tarefa.
+- Cada commit deve deixar o projeto compilando e com os testes verdes.
+- Conventional Commits em pt-BR, sem `Co-Authored-By`.
+- Branch por tarefa (`feat/tNN-...`), com merge fast-forward na `main`.
