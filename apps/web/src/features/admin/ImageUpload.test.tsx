@@ -146,6 +146,18 @@ describe('ImageUpload', () => {
     expect(states.filter((s) => !s.uploading)).toEqual([]);
   });
 
+  it('remover -> enviar outra -> descartar volta a REMOVER (não a manter a imagem antiga)', async () => {
+    const upload = vi.fn().mockResolvedValue(KEY);
+    render(<ImageUpload currentUrl="http://s3/atual.png" onChange={onChange} upload={upload} />);
+    await user.click(screen.getByRole('button', { name: 'Remover imagem' }));
+    await user.upload(input(), png());
+    await waitFor(() => expect(last()?.change).toEqual({ kind: 'replace', key: KEY }));
+    await user.click(screen.getByRole('button', { name: 'Descartar nova imagem' }));
+    expect(last()).toEqual({ change: { kind: 'remove' }, uploading: false });
+    expect(screen.getByText('A imagem será removida quando você salvar.')).toBeTruthy();
+    expect(screen.queryByAltText('Imagem atual do produto')).toBeNull();
+  });
+
   it('"Cancelar envio" aborta o upload em andamento', async () => {
     let signal: AbortSignal | undefined;
     const upload = vi.fn(

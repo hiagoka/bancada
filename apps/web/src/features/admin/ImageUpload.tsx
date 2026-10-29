@@ -76,8 +76,7 @@ export function ImageUpload({ currentUrl, onChange, upload = uploadProductImage 
       if (!alive.current || abort.signal.aborted) return;
       dropPreview(uploaded?.previewUrl ?? null);
       setUploaded({ key, previewUrl });
-      setRemoved(false);
-      setPending(null);
+      setPending(null); // `removed` fica: descartar a nova imagem volta ao estado anterior
       report({ kind: 'replace', key });
     } catch (caught) {
       dropPreview(previewUrl);
