@@ -250,3 +250,38 @@
   background: var(--paper);
   font-weight: 700;
 }
+
+.admin-form__label {
+  font-family: var(--font-display);
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: var(--text-sm);
+}
+
+.admin-form__value {
+  min-height: 2.75rem;
+  display: flex;
+  align-items: center;
+  font-size: var(--text-lg, 1.125rem);
+}
+
+.admin-form__check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.admin-form__check input {
+  width: 1.5rem;
+  height: 1.5rem;
+  accent-color: var(--mat);
+}
+
+.admin-form__check label {
+  font-weight: 700;
+}
+
+.admin-form .field input[readonly] {
+  background: color-mix(in srgb, var(--ink) 6%, var(--paper));
+  color: var(--ink);
+}
