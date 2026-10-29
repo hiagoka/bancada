@@ -8,6 +8,7 @@ import { FormAlert } from './FormAlert';
 import { ImageUpload, type ImageUploadState } from './ImageUpload';
 import {
   createFormSchema,
+  PRICE_HINT,
   toCreateInput,
   type CreateFormInput,
   type CreateFormValues,
@@ -137,7 +138,7 @@ export function ProductCreateForm() {
               {...register('price')}
             />
             <p id="product-price-hint" className="muted admin-form__hint">
-              Em reais, por exemplo 349,90.
+              {PRICE_HINT}
             </p>
             {errors.price ? (
               <p id="product-price-error" role="alert" className="field-error">

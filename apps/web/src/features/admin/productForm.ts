@@ -9,6 +9,9 @@ import { parsePriceToCents } from '../../lib/format';
 // As regras e mensagens (PT-BR) dos campos de texto, do preço e do estoque vêm do contracts.
 const shape = adminProductInputSchema.shape;
 
+// Dica sob o campo Preço (a vírgula separa os centavos; "349.90" também é aceito, mas não é o padrão).
+export const PRICE_HINT = 'Em reais, use vírgula para os centavos (ex.: 349,90).';
+
 export const PRICE_FORMAT_MESSAGE = 'Preço inválido. Use o formato 349,90.';
 
 // Preço digitado em REAIS ("349,90", "1.349,90") -> centavos inteiros, sem ponto flutuante

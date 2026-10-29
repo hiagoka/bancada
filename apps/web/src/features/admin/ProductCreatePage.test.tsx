@@ -83,6 +83,12 @@ describe('ProductFormPage: criação', () => {
     expect(document.title).toBe('Novo produto · Bancada');
   });
 
+  it('a dica do preço manda usar vírgula para os centavos', async () => {
+    renderPage();
+    const hint = screen.getByText('Em reais, use vírgula para os centavos (ex.: 349,90).');
+    expect(screen.getByLabelText('Preço (R$)').getAttribute('aria-describedby')).toContain(hint.id);
+  });
+
   it('envia centavos INTEIROS (349,90 -> 34990), textos aparados e SEM active/stock', async () => {
     mockCreate.mockResolvedValue(makeAdminProduct());
     renderPage();

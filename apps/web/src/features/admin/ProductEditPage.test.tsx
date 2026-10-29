@@ -88,6 +88,12 @@ describe('ProductFormPage: edição', () => {
     expect(screen.queryByLabelText('Estoque inicial')).toBeNull();
   });
 
+  it('a dica do preço manda usar vírgula para os centavos', async () => {
+    renderPage();
+    await ready();
+    expect(screen.getByText('Em reais, use vírgula para os centavos (ex.: 349,90).')).toBeTruthy();
+  });
+
   it('sem alteração: não chama a API e avisa', async () => {
     renderPage();
     await ready();

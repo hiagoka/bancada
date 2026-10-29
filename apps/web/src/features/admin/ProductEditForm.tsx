@@ -11,6 +11,7 @@ import {
   buildUpdatePatch,
   centsToReais,
   editFormSchema,
+  PRICE_HINT,
   type EditFormInput,
   type EditFormValues,
 } from './productForm';
@@ -158,7 +159,7 @@ export function ProductEditForm({ product }: { product: AdminProductDetail }) {
               {...register('price')}
             />
             <p id="product-price-hint" className="muted admin-form__hint">
-              Em reais, por exemplo 349,90.
+              {PRICE_HINT}
             </p>
             {errors.price ? (
               <p id="product-price-error" role="alert" className="field-error">
