@@ -81,7 +81,8 @@ export function ImageUpload({ currentUrl, onChange, upload = uploadProductImage 
       report({ kind: 'replace', key });
     } catch (caught) {
       dropPreview(previewUrl);
-      if (!alive.current) return;
+      // Envio obsoleto (outro arquivo foi escolhido): não mexe no estado do envio atual.
+      if (!alive.current || controller.current !== abort) return;
       setPending(null);
       const aborted = caught instanceof DOMException && caught.name === 'AbortError';
       if (!aborted) {

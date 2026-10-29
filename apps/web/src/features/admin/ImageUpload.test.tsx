@@ -123,6 +123,29 @@ describe('ImageUpload', () => {
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:preview');
   });
 
+  it('escolher um segundo arquivo durante o envio do primeiro: a barra fica e o salvar segue bloqueado', async () => {
+    const upload = vi.fn(
+      (_f: File, _p: (n: number) => void, options?: { signal?: AbortSignal }) =>
+        new Promise<string>((_resolve, reject) => {
+          options?.signal?.addEventListener('abort', () =>
+            reject(new DOMException('x', 'AbortError')),
+          );
+        }),
+    );
+    render(<ImageUpload currentUrl={null} onChange={onChange} upload={upload} />);
+    await user.upload(input(), png(1000, 'primeira.png'));
+    await screen.findByRole('progressbar');
+    await user.upload(input(), png(1000, 'segunda.png'));
+    await waitFor(() => expect(upload).toHaveBeenCalledTimes(2));
+    // o catch do primeiro (abortado) já rodou: nada do estado pode ter sido tocado
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(screen.getByRole('progressbar')).toBeTruthy();
+    expect(last()?.uploading).toBe(true);
+    expect(states.filter((s) => !s.uploading)).toEqual([]);
+  });
+
   it('"Cancelar envio" aborta o upload em andamento', async () => {
     let signal: AbortSignal | undefined;
     const upload = vi.fn(
