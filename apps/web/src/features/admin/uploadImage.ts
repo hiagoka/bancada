@@ -91,7 +91,7 @@ export async function uploadProductImage(
 ): Promise<string> {
   const problem = validateImageFile(file);
   if (problem) throw new UploadError(problem);
-  const upload = await requestProductImageUpload(file.type);
+  const upload = await requestProductImageUpload(file.type, options.signal);
   await uploadFileToStorage(upload, file, onProgress, options);
   return upload.key;
 }

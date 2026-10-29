@@ -1,6 +1,12 @@
 import { MAX_UPLOAD_BYTES } from '@bancada/contracts';
-import { describe, expect, it, vi } from 'vitest';
-import { UploadError, uploadFileToStorage, validateImageFile, type XhrLike } from './uploadImage';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  UploadError,
+  uploadFileToStorage,
+  uploadProductImage,
+  validateImageFile,
+  type XhrLike,
+} from './uploadImage';
 
 const file = (type: string, size: number, name = 'foto.png'): File => {
   const f = new File(['x'], name, { type });
@@ -134,5 +140,29 @@ describe('uploadFileToStorage', () => {
     controller.abort();
     await expect(done).rejects.toMatchObject({ name: 'AbortError' });
     expect(FakeXhr.last.aborted).toBe(true);
+  });
+});
+
+describe('uploadProductImage: cancelamento', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('cancelar durante o presign aborta o fetch à API (o signal chega até lá)', async () => {
+    let seen: AbortSignal | undefined;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(
+      (_input, init) =>
+        new Promise((_resolve, reject) => {
+          seen = init?.signal ?? undefined;
+          seen?.addEventListener('abort', () => reject(new DOMException('x', 'AbortError')));
+        }),
+    );
+    const controller = new AbortController();
+    const done = uploadProductImage(file('image/png', 10), () => undefined, {
+      signal: controller.signal,
+    });
+    await vi.waitFor(() => expect(seen).toBeDefined());
+    expect(seen?.aborted).toBe(false);
+    controller.abort();
+    await expect(done).rejects.toMatchObject({ name: 'AbortError' });
+    expect(seen?.aborted).toBe(true);
   });
 });

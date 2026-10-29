@@ -69,11 +69,15 @@ export async function updateAdminProduct(
 }
 
 // POST /admin/uploads/product-image: presigned POST para enviar a imagem direto ao S3/MinIO.
-export async function requestProductImageUpload(contentType: string): Promise<UploadResponse> {
+export async function requestProductImageUpload(
+  contentType: string,
+  signal?: AbortSignal,
+): Promise<UploadResponse> {
   const body = uploadRequestSchema.parse({ contentType });
   return request('/admin/uploads/product-image', {
     method: 'POST',
     body,
     schema: uploadResponseSchema,
+    signal,
   });
 }
