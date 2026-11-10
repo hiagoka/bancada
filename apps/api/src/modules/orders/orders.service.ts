@@ -4,6 +4,7 @@ import type { Pool } from 'pg';
 import type { Logger } from 'pino';
 import { withTransaction } from '../../db/pool.js';
 import { AppError } from '../../shared/errors.js';
+import { CheckoutExpiredError } from '../payments/abacatepay.gateway.js';
 import { GatewayError, type PaymentGateway } from '../payments/payment-gateway.js';
 import { InsufficientStockError, applyStockMovement } from '../stock/stock.repository.js';
 import {
@@ -258,6 +259,15 @@ export class OrdersService {
       });
       await setCheckoutIfMissing(this.deps.pool, order.id, checkout);
     } catch (err) {
+      // O provedor exige um prazo mínimo para criar a cobrança: faltando menos que isso, o retry
+      // nunca mais funciona e o web precisa gerar uma chave nova (mesmo desfecho da D19).
+      if (err instanceof CheckoutExpiredError) {
+        this.deps.logger.warn(
+          { orderId: order.id, provider: this.deps.gateway.name },
+          'Checkout não refeito: prazo restante menor que o mínimo do provedor',
+        );
+        throw expired();
+      }
       // GatewayError já tem mensagem sem credenciais; qualquer outro erro (ex.: banco) é nosso
       // e não carrega o token, então vai completo, com stack.
       this.deps.logger.error(
