@@ -56,7 +56,7 @@ describe('AbacatePayGateway.createCheckout', () => {
       method: 'PIX',
       data: {
         amount: 49800,
-        expiresIn: 1800,
+        expiresIn: 1770,
         externalId: ORDER_ID,
         description: 'Pedido 3F2504E0',
         metadata: { orderId: ORDER_ID },
@@ -69,6 +69,13 @@ describe('AbacatePayGateway.createCheckout', () => {
       qrCodeImage: FAKE_QR_IMAGE,
       expiresAt: expect.any(Date),
     });
+  });
+
+  it('o Pix nunca vive além de created_at + 30 min: expiresIn sempre desconta a margem de 30 s', async () => {
+    const expiresAt = new Date(NOW.getTime() + 30 * 60 * 1000);
+    await gateway().createCheckout(checkoutRequest({ expiresAt }));
+    const { expiresIn } = (fake.requests[0]!.json as { data: { expiresIn: number } }).data;
+    expect(NOW.getTime() + expiresIn * 1000).toBeLessThanOrEqual(expiresAt.getTime() - 30_000);
   });
 
   it('não envia nenhum dado do cliente (nem customer, nem CPF, nem e-mail)', async () => {
@@ -88,13 +95,13 @@ describe('AbacatePayGateway.createCheckout', () => {
   });
 
   it.each([
-    [30 * 60 * 1000, 1800],
-    [10 * 60 * 1000, 600],
-    [300 * 1000, 300],
-    [300 * 1000 + 999, 300],
-    [301 * 1000, 301],
+    [30 * 60 * 1000, 1770],
+    [10 * 60 * 1000, 570],
+    [330 * 1000, 300],
+    [330 * 1000 + 999, 300],
+    [331 * 1000, 301],
   ])(
-    'expiresIn = segundos inteiros até created_at + 30 min (%i ms -> %i s)',
+    'expiresIn = segundos inteiros até created_at + 30 min, MENOS 30 s de margem (%i ms -> %i s)',
     async (ms, seconds) => {
       await gateway().createCheckout(checkoutRequest({ expiresAt: new Date(NOW.getTime() + ms) }));
       const data = (fake.requests[0]!.json as { data: { expiresIn: number } }).data;
@@ -102,8 +109,8 @@ describe('AbacatePayGateway.createCheckout', () => {
     },
   );
 
-  it.each([299 * 1000, 299_999, 60 * 1000, 1000, 0, -5000])(
-    'faltando menos de 300 s (%i ms) NÃO chama a API e sinaliza expirado',
+  it.each([329_999, 300 * 1000, 299_999, 60 * 1000, 1000, 0, -5000])(
+    'sobrando menos de 330 s (300 s de piso + 30 s de margem) (%i ms) NÃO chama a API e sinaliza expirado',
     async (ms) => {
       const attempt = gateway().createCheckout(
         checkoutRequest({ expiresAt: new Date(NOW.getTime() + ms) }),

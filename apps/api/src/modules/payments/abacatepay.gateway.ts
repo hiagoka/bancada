@@ -12,6 +12,10 @@ export const DEFAULT_ABACATEPAY_API_URL = 'https://api.abacatepay.com/v2';
 const DEFAULT_TIMEOUT_MS = 10_000;
 // A AbacatePay recusa expiresIn menor que isso ("expiresIn must be at least 300 seconds").
 export const MIN_EXPIRES_IN_SECONDS = 300;
+// A AbacatePay soma expiresIn ao relógio DELA, que chega depois do nosso created_at (latência da
+// chamada). Sem a margem o Pix poderia viver além de created_at + 30 min, e o admin já pode cancelar
+// o pedido nesse instante (pagamento no intervalo = dinheiro recebido e pedido cancelado).
+const SAFETY_MARGIN_SECONDS = 30;
 const MAX_PROVIDER_MESSAGE = 200;
 const PNG_DATA_URI_PREFIX = 'data:image/png;base64,';
 
@@ -104,7 +108,8 @@ export class AbacatePayGateway implements PaymentGateway {
 
   // Cobrança Pix transparente (seção 8.9). Nenhum dado do cliente é enviado.
   async createCheckout(req: CheckoutRequest): Promise<CheckoutResult> {
-    const expiresIn = Math.floor((req.expiresAt.getTime() - this.now().getTime()) / 1000);
+    const expiresIn =
+      Math.floor((req.expiresAt.getTime() - this.now().getTime()) / 1000) - SAFETY_MARGIN_SECONDS;
     if (expiresIn < MIN_EXPIRES_IN_SECONDS) throw new CheckoutExpiredError();
 
     const body = await this.call('/transparents/create', {

@@ -83,10 +83,12 @@ describe('POST /orders com a AbacatePay', () => {
       qrCodeImage: FAKE_QR_IMAGE,
       expiresAt: expect.any(String),
     });
-    // validade ancorada em created_at + 30 min (D19), com a folga de arredondamento do provedor
+    // validade ancorada em created_at + 30 min (D19), NUNCA além dele: o expiresIn desconta 30 s de
+    // margem, porque a AbacatePay soma o prazo ao relógio dela, não ao nosso created_at
     const expiresAt = new Date(res.body.data.pix.expiresAt).getTime();
-    const target = new Date(row.created_at).getTime() + 30 * 60 * 1000;
-    expect(Math.abs(expiresAt - target)).toBeLessThan(5000);
+    const limit = new Date(row.created_at).getTime() + 30 * 60 * 1000;
+    expect(expiresAt).toBeLessThanOrEqual(limit);
+    expect(limit - expiresAt).toBeLessThan(40_000);
   });
 
   it('o preço enviado pelo cliente continua ignorado', async () => {
@@ -168,7 +170,7 @@ describe('POST /orders com a AbacatePay', () => {
     const retry = await post(key);
     expect(retry.status).toBe(200);
     const sent = createCalls().at(-1)!.json as { data: { expiresIn: number } };
-    expect(sent.data.expiresIn).toBe(10 * 60);
+    expect(sent.data.expiresIn).toBe(10 * 60 - 30);
   });
 
   it('a chave de API não aparece em nenhuma resposta nem no corpo enviado', async () => {
