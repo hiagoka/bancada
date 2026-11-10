@@ -594,6 +594,71 @@ describe('GET /orders/:id', () => {
     }
   });
 
+  describe('pix (AbacatePay, D34)', () => {
+    const PIX_CODE = '00020101021226950014br.gov.bcb.pix0136teste';
+    const PIX_IMAGE = 'data:image/png;base64,iVBORw0KGgo=';
+    const PIX_EXPIRES = '2030-01-01T12:30:00.000Z';
+
+    async function withPix(): Promise<string> {
+      const id = await createOne();
+      await pool.query(
+        `UPDATE orders SET checkout_id = 'pix_char_1', checkout_url = NULL, pix_code = $2, pix_qr_image = $3,
+                           pix_expires_at = $4 WHERE id = $1`,
+        [id, PIX_CODE, PIX_IMAGE, PIX_EXPIRES],
+      );
+      return id;
+    }
+
+    it('PENDING: devolve brCode, qrCodeImage e expiresAt (e checkoutUrl nulo)', async () => {
+      const id = await withPix();
+      const res = await request(app).get(`/orders/${id}`);
+      expect(res.status).toBe(200);
+      expect(res.body.data.pix).toEqual({
+        brCode: PIX_CODE,
+        qrCodeImage: PIX_IMAGE,
+        expiresAt: PIX_EXPIRES,
+      });
+      expect(res.body.data.checkoutUrl).toBeNull();
+      expect(publicOrderSchema.safeParse(res.body.data).success).toBe(true);
+    });
+
+    it.each(['PAID', 'CANCELLED', 'REFUNDED'])(
+      '%s: pix some (só existe enquanto PENDING)',
+      async (status) => {
+        const id = await withPix();
+        await pool.query('UPDATE orders SET status = $2 WHERE id = $1', [id, status]);
+        const res = await request(app).get(`/orders/${id}`);
+        expect(res.body.data.status).toBe(status);
+        expect(res.body.data.pix).toBeNull();
+        expect(JSON.stringify(res.body)).not.toContain(PIX_CODE);
+      },
+    );
+
+    it('sem Pix gravado (fake ou pedido antigo): pix é null', async () => {
+      const id = await createOne();
+      const res = await request(app).get(`/orders/${id}`);
+      expect(res.body.data.pix).toBeNull();
+    });
+
+    it('Pix incompleto no banco (falta um campo): pix é null, nunca um objeto pela metade', async () => {
+      const id = await createOne();
+      await pool.query(`UPDATE orders SET pix_code = $2 WHERE id = $1`, [id, PIX_CODE]);
+      const res = await request(app).get(`/orders/${id}`);
+      expect(res.status).toBe(200);
+      expect(res.body.data.pix).toBeNull();
+    });
+
+    it('a resposta com Pix continua sem nenhum dado do cliente', async () => {
+      const id = await withPix();
+      const res = await request(app).get(`/orders/${id}`);
+      const text = JSON.stringify(res.body);
+      expect(text).not.toContain('Ana Souza');
+      expect(text).not.toContain('ana@example.com');
+      expect(text.toLowerCase()).not.toContain('customer');
+      expect(Object.keys(res.body.data.pix).sort()).toEqual(['brCode', 'expiresAt', 'qrCodeImage']);
+    });
+  });
+
   it('paidAt preenchido quando pago', async () => {
     const id = await createOne();
     await pool.query(`UPDATE orders SET status = 'PAID', paid_at = now() WHERE id = $1`, [id]);

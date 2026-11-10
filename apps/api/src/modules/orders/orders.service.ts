@@ -219,7 +219,8 @@ export class OrdersService {
   // está mais PENDING, volta como está (o gateway não é chamado). Se o gateway falhar, o pedido
   // e a reserva de estoque continuam salvos e o retry com a mesma chave conclui o checkout.
   private async ensureCheckout(order: OrderWithItems): Promise<OrderWithItems> {
-    if (order.status !== 'PENDING' || order.checkoutUrl) return order;
+    // Checkout feito = checkout_id gravado (a AbacatePay não tem checkoutUrl; o fake tem os dois).
+    if (order.status !== 'PENDING' || order.checkoutId) return order;
 
     const unavailable = (): AppError =>
       new AppError(
@@ -255,12 +256,7 @@ export class OrdersService {
         totalCents: order.totalCents,
         expiresAt,
       });
-      await setCheckoutIfMissing(
-        this.deps.pool,
-        order.id,
-        checkout.checkoutId,
-        checkout.checkoutUrl,
-      );
+      await setCheckoutIfMissing(this.deps.pool, order.id, checkout);
     } catch (err) {
       // GatewayError já tem mensagem sem credenciais; qualquer outro erro (ex.: banco) é nosso
       // e não carrega o token, então vai completo, com stack.

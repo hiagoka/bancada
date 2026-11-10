@@ -3,6 +3,7 @@ import request from 'supertest';
 import { createApp } from '../src/app.js';
 import { createPool } from '../src/db/pool.js';
 import { FakePaymentGateway } from '../src/modules/payments/fake.gateway.js';
+import { GatewayError } from '../src/modules/payments/payment-gateway.js';
 import { FakeStorageService } from '../src/modules/storage/fake.storage.js';
 import { resetDb } from './db-helpers.js';
 import { silentLogger, testDatabaseUrl, authDeps } from './helpers.js';
@@ -202,6 +203,93 @@ describe('falha do gateway', () => {
   });
 });
 
+describe('checkout Pix (sem checkoutUrl)', () => {
+  // Gateway que se comporta como a AbacatePay: checkoutUrl nulo e a cobrança Pix no resultado.
+  class PixGateway extends FakePaymentGateway {
+    pixCalls = 0;
+    pixFailures = 0;
+    override async createCheckout(req: Parameters<FakePaymentGateway['createCheckout']>[0]) {
+      this.pixCalls += 1;
+      if (this.pixFailures > 0) {
+        this.pixFailures -= 1;
+        throw new GatewayError('Provedor Pix indisponível');
+      }
+      return {
+        checkoutId: `pix_char_${req.orderId}`,
+        checkoutUrl: null,
+        pix: {
+          brCode: '00020101021226950014br.gov.bcb.pix0136teste',
+          qrCodeImage: 'data:image/png;base64,iVBORw0KGgo=',
+          expiresAt: req.expiresAt,
+        },
+      };
+    }
+  }
+  let pixGateway: PixGateway;
+  let pixApp: ReturnType<typeof createApp>;
+
+  beforeEach(() => {
+    pixGateway = new PixGateway({ webUrl });
+    pixApp = createApp({
+      ...authDeps,
+      pool,
+      logger: silentLogger,
+      webUrl,
+      storage: new FakeStorageService(),
+      gateway: pixGateway,
+      now: () => clock ?? new Date(),
+    });
+  });
+
+  async function postPix(key: string) {
+    return request(pixApp)
+      .post('/orders')
+      .set('Idempotency-Key', key)
+      .send({ customer, items: [{ productId: await mouseId(), quantity: 1 }] });
+  }
+
+  it('grava checkout_id e os campos Pix e devolve pix no pedido (checkoutUrl nulo)', async () => {
+    const res = await postPix(randomUUID());
+    expect(res.status).toBe(201);
+    const [row] = await orderRows();
+    expect(row.checkout_id).toBe(`pix_char_${row.id}`);
+    expect(row.checkout_url).toBeNull();
+    expect(row.pix_code).toBe('00020101021226950014br.gov.bcb.pix0136teste');
+    expect(row.pix_qr_image).toBe('data:image/png;base64,iVBORw0KGgo=');
+    expect(new Date(row.pix_expires_at).getTime()).toBe(
+      new Date(row.created_at).getTime() + 30 * 60 * 1000,
+    );
+    expect(res.body.data.checkoutUrl).toBeNull();
+    expect(res.body.data.pix).toEqual({
+      brCode: '00020101021226950014br.gov.bcb.pix0136teste',
+      qrCodeImage: 'data:image/png;base64,iVBORw0KGgo=',
+      expiresAt: new Date(row.pix_expires_at).toISOString(),
+    });
+  });
+
+  it('replay da mesma chave NÃO cria outra cobrança (o checkout é detectado por checkout_id)', async () => {
+    const key = randomUUID();
+    const first = await postPix(key);
+    const again = await postPix(key);
+    expect(again.status).toBe(200);
+    expect(pixGateway.pixCalls).toBe(1);
+    expect(again.body.data.pix).toEqual(first.body.data.pix);
+  });
+
+  it('falha do gateway seguida de retry conclui o Pix sem duplicar pedido nem estoque', async () => {
+    const key = randomUUID();
+    pixGateway.pixFailures = 1;
+    const failed = await postPix(key);
+    expect(failed.status).toBe(502);
+    expect((await orderRows())[0].checkout_id).toBeNull();
+    const retry = await postPix(key);
+    expect(retry.status).toBe(200);
+    expect(retry.body.data.pix).not.toBeNull();
+    expect(await orderRows()).toHaveLength(1);
+    expect(await orderMovements()).toBe(1);
+  });
+});
+
 describe('corrida na gravação do checkout', () => {
   it('se outra requisição grava o checkout durante a chamada ao gateway, o dela vale', async () => {
     class RacingGateway extends FakePaymentGateway {
@@ -211,7 +299,7 @@ describe('corrida na gravação do checkout', () => {
            WHERE id = $1`,
           [req.orderId],
         );
-        return { checkoutId: 'perdedor', checkoutUrl: 'https://perdedor.test' };
+        return { checkoutId: 'perdedor', checkoutUrl: 'https://perdedor.test', pix: null };
       }
     }
     const racingApp = createApp({

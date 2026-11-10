@@ -19,6 +19,10 @@ export interface OrderRecord {
   paymentProvider: string;
   checkoutId: string | null;
   checkoutUrl: string | null;
+  // Cobrança Pix (D34), gravada junto com o checkout. Nulos no gateway fake e em pedidos antigos.
+  pixCode: string | null;
+  pixQrImage: string | null;
+  pixExpiresAt: Date | null;
   paidAt: Date | null;
   createdAt: Date;
 }
@@ -54,6 +58,9 @@ interface OrderRow {
   payment_provider: string;
   checkout_id: string | null;
   checkout_url: string | null;
+  pix_code: string | null;
+  pix_qr_image: string | null;
+  pix_expires_at: Date | null;
   paid_at: Date | null;
   created_at: Date;
 }
@@ -66,7 +73,8 @@ interface ItemRow {
 }
 
 const ORDER_COLUMNS = `id, idempotency_key, request_hash, customer_name, customer_email, status,
-                       total_cents, payment_provider, checkout_id, checkout_url, paid_at, created_at`;
+                       total_cents, payment_provider, checkout_id, checkout_url,
+                       pix_code, pix_qr_image, pix_expires_at, paid_at, created_at`;
 
 function toOrder(row: OrderRow): OrderRecord {
   return {
@@ -80,6 +88,9 @@ function toOrder(row: OrderRow): OrderRecord {
     paymentProvider: row.payment_provider,
     checkoutId: row.checkout_id,
     checkoutUrl: row.checkout_url,
+    pixCode: row.pix_code,
+    pixQrImage: row.pix_qr_image,
+    pixExpiresAt: row.pix_expires_at,
     paidAt: row.paid_at,
     createdAt: row.created_at,
   };
@@ -178,17 +189,33 @@ export async function insertOrderItem(
   );
 }
 
-// Só grava se ainda não houver checkout: se outra requisição chegou antes, a dela vale.
+export interface CheckoutRecord {
+  checkoutId: string;
+  // Fake: página de checkout simulada. AbacatePay: null (o cliente paga pelo Pix).
+  checkoutUrl: string | null;
+  pix: { brCode: string; qrCodeImage: string; expiresAt: Date } | null;
+}
+
+// Só grava se ainda não houver checkout (checkout_id nulo): se outra requisição chegou antes, a
+// dela vale. O id do checkout, a URL e o Pix entram juntos, num único UPDATE.
 export async function setCheckoutIfMissing(
   db: Db,
   orderId: string,
-  checkoutId: string,
-  checkoutUrl: string,
+  checkout: CheckoutRecord,
 ): Promise<void> {
   await db.query(
-    `UPDATE orders SET checkout_id = $2, checkout_url = $3, updated_at = now()
-     WHERE id = $1 AND checkout_url IS NULL`,
-    [orderId, checkoutId, checkoutUrl],
+    `UPDATE orders
+     SET checkout_id = $2, checkout_url = $3, pix_code = $4, pix_qr_image = $5, pix_expires_at = $6,
+         updated_at = now()
+     WHERE id = $1 AND checkout_id IS NULL`,
+    [
+      orderId,
+      checkout.checkoutId,
+      checkout.checkoutUrl,
+      checkout.pix?.brCode ?? null,
+      checkout.pix?.qrCodeImage ?? null,
+      checkout.pix?.expiresAt ?? null,
+    ],
   );
 }
 

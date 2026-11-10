@@ -18,9 +18,21 @@ export interface CheckoutRequest {
   expiresAt: Date;
 }
 
+// Cobrança Pix que o cliente paga (AbacatePay, D34).
+export interface PixInfo {
+  // Pix copia e cola.
+  brCode: string;
+  // Imagem do QR Code (data URI PNG).
+  qrCodeImage: string;
+  expiresAt: Date;
+}
+
 export interface CheckoutResult {
   checkoutId: string;
-  checkoutUrl: string;
+  // Fake: página de checkout simulada. AbacatePay: null (o cliente paga pelo Pix).
+  checkoutUrl: string | null;
+  // AbacatePay: a cobrança Pix. Fake: null.
+  pix: PixInfo | null;
 }
 
 export interface Payment {

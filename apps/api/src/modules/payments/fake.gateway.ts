@@ -61,6 +61,7 @@ export class FakePaymentGateway implements PaymentGateway {
       checkout = {
         checkoutId: `fake-checkout-${req.orderId}`,
         checkoutUrl: `${this.webUrl}/checkout-simulado/${req.orderId}`,
+        pix: null,
       };
       this.checkouts.set(req.orderId, checkout);
     }

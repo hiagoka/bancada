@@ -212,7 +212,7 @@ describe('orderSchema', () => {
 
   it('não carrega o pix (o QR Code em base64 inflaria a lista do admin)', () => {
     expect(Object.keys(orderSchema.shape)).not.toContain('pix');
-    expect(orderSchema.parse({ ...full, pix }).pix).toBeUndefined();
+    expect(orderSchema.parse({ ...full, pix })).not.toHaveProperty('pix');
   });
 
   it('exige customer e cancellable booleano', () => {
