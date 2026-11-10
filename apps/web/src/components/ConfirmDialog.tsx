@@ -11,6 +11,9 @@ interface Props {
   cancelLabel: string;
   // Enviando: botões aria-disabled, confirmar não repete e Esc/fundo não fecham.
   busy?: boolean;
+  // Quem abriu (event.currentTarget do clique): o foco volta a ele ao fechar. Sem isso, vale o
+  // elemento focado na abertura (que em Safari/Firefox no Mac não é o botão clicado).
+  opener?: HTMLElement | null;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -27,6 +30,7 @@ export function ConfirmDialog({
   confirmLabel,
   cancelLabel,
   busy = false,
+  opener: openerProp = null,
   onConfirm,
   onCancel,
 }: Props) {
@@ -35,10 +39,14 @@ export function ConfirmDialog({
   const panelRef = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
+  const openerPropRef = useRef(openerProp);
+  openerPropRef.current = openerProp;
 
   useEffect(() => {
     if (!open) return;
-    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const opener =
+      openerPropRef.current ??
+      (document.activeElement instanceof HTMLElement ? document.activeElement : null);
     // Tudo que está no <body> fora do diálogo fica inerte (teclado, clique e leitor de tela).
     const inerted: HTMLElement[] = [];
     for (const child of Array.from(document.body.children)) {
@@ -86,7 +94,9 @@ export function ConfirmDialog({
       className="dialog-backdrop"
       onKeyDown={onKeyDown}
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget && !busy) onCancel();
+        if (event.target !== event.currentTarget) return;
+        event.preventDefault(); // o navegador não move o foco para o <body> depois de fechar
+        if (!busy) onCancel();
       }}
     >
       <div

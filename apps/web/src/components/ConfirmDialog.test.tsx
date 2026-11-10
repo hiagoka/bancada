@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
@@ -36,6 +36,49 @@ function Harness({
 }
 
 const dialog = () => screen.getByRole('dialog');
+
+// Safari e Firefox no Mac NÃO focam o botão ao clicar: activeElement fica no <body>. O chamador passa o
+// opener explicitamente (event.currentTarget) e o foco volta a ELE.
+function OpenerHarness() {
+  const [opener, setOpener] = useState<HTMLElement | null>(null);
+  return (
+    <>
+      <button onClick={(event) => setOpener(event.currentTarget)}>Abrir sem foco</button>
+      <ConfirmDialog
+        open={opener !== null}
+        opener={opener}
+        title="Confirmar?"
+        description="Descrição."
+        confirmLabel="Confirmar"
+        cancelLabel="Voltar"
+        onConfirm={() => undefined}
+        onCancel={() => setOpener(null)}
+      />
+    </>
+  );
+}
+
+describe('ConfirmDialog: opener explícito', () => {
+  it.each([
+    ['Esc', () => user.keyboard('{Escape}')],
+    ['Voltar', () => user.click(screen.getByRole('button', { name: 'Voltar' }))],
+    [
+      'clique no fundo',
+      () => user.click(document.querySelector('.dialog-backdrop') as HTMLElement),
+    ],
+  ])(
+    'fechar por %s devolve o foco ao opener mesmo sem ele ter recebido foco no clique',
+    async (_n, close) => {
+      render(<OpenerHarness />);
+      const opener = screen.getByRole('button', { name: 'Abrir sem foco' });
+      fireEvent.click(opener); // clique sem foco, como no Safari
+      expect(document.activeElement).not.toBe(opener);
+      await close();
+      expect(screen.queryByRole('dialog')).toBeNull();
+      expect(document.activeElement).toBe(opener);
+    },
+  );
+});
 
 describe('ConfirmDialog', () => {
   it('fechado: nada na tela', () => {
