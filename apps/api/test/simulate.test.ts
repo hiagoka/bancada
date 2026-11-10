@@ -118,13 +118,13 @@ describe('POST /dev/payments/simulate (gateway fake)', () => {
     expect(JSON.stringify(res.body.error.details)).toContain('Pedido inválido');
   });
 
-  it('com gateway mercadopago a rota nem existe: 404 padrão', async () => {
+  it('com um gateway real (não fake) a rota nem existe: 404 padrão', async () => {
     const real: PaymentGateway = {
-      name: 'mercadopago',
+      name: 'abacatepay',
       createCheckout: (req) => gateway.createCheckout(req),
       getPayment: (id) => gateway.getPayment(id),
     };
-    const mpApp = createApp({
+    const realApp = createApp({
       ...authDeps,
       pool,
       logger: silentLogger,
@@ -132,7 +132,7 @@ describe('POST /dev/payments/simulate (gateway fake)', () => {
       storage: new FakeStorageService(),
       gateway: real,
     });
-    const res = await request(mpApp)
+    const res = await request(realApp)
       .post('/dev/payments/simulate')
       .send({ orderId: randomUUID(), status: 'approved' });
     expect(res.status).toBe(404);

@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { MAX_INT4 } from './limits.js';
 
-// Status de pagamento do Mercado Pago que o sistema reconhece.
+// Vocabulário de status de pagamento que o sistema reconhece (gateway fake e /dev/payments/simulate;
+// cada gateway real traduz o status do seu provedor para estes).
 export const paymentStatusSchema = z.enum(
   [
     'approved',

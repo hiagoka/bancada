@@ -45,11 +45,7 @@ const envObject = z.object({
     .enum(['true', 'false'], { error: 'deve ser "true" ou "false"' })
     .transform((v) => v === 'true')
     .optional(),
-  PAYMENT_PROVIDER: z
-    .enum(['fake', 'mercadopago'], { error: 'deve ser "fake" ou "mercadopago"' })
-    .default('fake'),
-  MP_ACCESS_TOKEN: optionalString,
-  MP_WEBHOOK_SECRET: optionalString,
+  PAYMENT_PROVIDER: z.enum(['fake'], { error: 'deve ser "fake"' }).default('fake'),
   S3_ENDPOINT: z.url({ error: 'deve ser uma URL válida' }).optional(),
   S3_REGION: optionalString,
   S3_BUCKET: optionalString,
@@ -101,19 +97,8 @@ const envSchema = envObject
         path: ['PAYMENT_PROVIDER'],
         message:
           'o provedor "fake" não pode ser usado em produção (pagamentos simulados). ' +
-          'Use "mercadopago" ou, se for de propósito, defina ALLOW_FAKE_PAYMENTS=true',
+          'Use um provedor real ou, se for de propósito, defina ALLOW_FAKE_PAYMENTS=true',
       });
-    }
-    if (env.PAYMENT_PROVIDER === 'mercadopago') {
-      for (const name of ['MP_ACCESS_TOKEN', 'MP_WEBHOOK_SECRET'] as const) {
-        if (!env[name]) {
-          ctx.addIssue({
-            code: 'custom',
-            path: [name],
-            message: 'é obrigatória quando PAYMENT_PROVIDER=mercadopago',
-          });
-        }
-      }
     }
     // Em produção não há padrão: o bucket real precisa ser configurado de propósito
     // (S3_ENDPOINT continua opcional: vazio na AWS).

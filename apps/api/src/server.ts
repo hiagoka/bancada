@@ -3,7 +3,6 @@ import { createApp } from './app.js';
 import { EnvError, loadEnv, type Env } from './config/env.js';
 import { createPool } from './db/pool.js';
 import { FakePaymentGateway } from './modules/payments/fake.gateway.js';
-import { createMercadoPagoGateway } from './modules/payments/mercadopago.gateway.js';
 import { createS3Storage } from './modules/storage/s3.storage.js';
 
 const SHUTDOWN_TIMEOUT_MS = 10_000;
@@ -25,14 +24,7 @@ const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' });
 const pool = createPool(env.DATABASE_URL);
 pool.on('error', (err) => logger.error({ err }, 'Erro em conexão ociosa do pool'));
 
-const gateway =
-  env.PAYMENT_PROVIDER === 'mercadopago'
-    ? createMercadoPagoGateway({
-        accessToken: env.MP_ACCESS_TOKEN!,
-        webUrl: env.WEB_URL,
-        apiPublicUrl: env.API_PUBLIC_URL,
-      })
-    : new FakePaymentGateway({ webUrl: env.WEB_URL });
+const gateway = new FakePaymentGateway({ webUrl: env.WEB_URL });
 
 const storage = createS3Storage({
   region: env.S3_REGION,
@@ -67,7 +59,6 @@ const app = createApp({
   secureCookies: env.NODE_ENV === 'production',
   bcryptCost: env.BCRYPT_COST,
   trustProxy: env.TRUST_PROXY,
-  webhookSecret: env.PAYMENT_PROVIDER === 'mercadopago' ? env.MP_WEBHOOK_SECRET : undefined,
 });
 const server = app.listen(env.PORT, (err?: Error) => {
   if (err) {

@@ -11,7 +11,7 @@
 #   docker compose exec api node dist/scripts/create-admin.js --email admin@bancada.test --password '<senha>' --name Admin
 #
 # TUDO aqui é de DESENVOLVIMENTO: senhas padrão (sobrescreva com variáveis de ambiente ou um .env na
-# raiz), pagamento SIMULADO (PAYMENT_PROVIDER=fake) e nenhum segredo real. Para o Mercado Pago ou
+# raiz), pagamento SIMULADO (PAYMENT_PROVIDER=fake) e nenhum segredo real. Para pagamentos reais ou
 # produção, ver o README.
 
 services:

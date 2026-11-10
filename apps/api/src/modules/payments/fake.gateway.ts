@@ -47,7 +47,7 @@ export class FakePaymentGateway implements PaymentGateway {
     this.pendingGetPaymentFailures = n;
   }
 
-  // Idempotente por orderId, como a Preference do Mercado Pago com idempotencyKey.
+  // Idempotente por orderId, como a cobrança de um provedor real com chave de idempotência.
   async createCheckout(req: CheckoutRequest): Promise<CheckoutResult> {
     this.createCheckoutCalls += 1;
     this.lastCheckoutRequest = req;

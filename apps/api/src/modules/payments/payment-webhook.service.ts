@@ -3,7 +3,7 @@ import type { Pool } from 'pg';
 import type { Logger } from 'pino';
 import { z } from 'zod';
 import { withTransaction, type Db } from '../../db/pool.js';
-import { canTransition, mpStatusToOrderStatus } from '../orders/order-status.js';
+import { canTransition, paymentStatusToOrderStatus } from '../orders/order-status.js';
 import { applyStockMovement } from '../stock/stock.repository.js';
 import { GatewayError, type Payment, type PaymentGateway } from './payment-gateway.js';
 
@@ -14,7 +14,7 @@ export type WebhookOutcome =
   | 'amount_mismatch'
   | 'duplicate'
   | 'order_not_found'
-  // O provedor não conhece o pagamento (ex.: notificação de teste do painel do MP): nada é gravado.
+  // O provedor não conhece o pagamento (ex.: notificação de teste do painel do provedor): nada é gravado.
   | 'payment_not_found';
 
 export interface PaymentWebhookServiceDeps {
@@ -58,7 +58,7 @@ export class PaymentWebhookService {
         'Webhook: status de pagamento desconhecido (sem mudança)',
       );
     }
-    const target = payment.status === 'unknown' ? null : mpStatusToOrderStatus(payment.status);
+    const target = payment.status === 'unknown' ? null : paymentStatusToOrderStatus(payment.status);
 
     // Evento, pedido e estoque numa única transação: se algo falhar, nada fica gravado.
     return withTransaction(this.deps.pool, async (client) => {

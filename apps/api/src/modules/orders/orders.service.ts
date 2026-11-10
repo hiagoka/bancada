@@ -25,7 +25,7 @@ export interface OrdersServiceDeps {
   now?: () => Date;
 }
 
-// A Preference expira 30 minutos depois da criação do pedido (D14). É a mesma janela do
+// A cobrança no provedor expira 30 minutos depois da criação do pedido (D14). É a mesma janela do
 // cancelamento manual (8.8: created_at < agora - 30 min), então um pedido que o admin pode
 // cancelar nunca está mais pagável no provedor.
 const CHECKOUT_TTL_MS = 30 * 60 * 1000;

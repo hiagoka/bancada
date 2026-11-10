@@ -95,9 +95,7 @@ describe('parseEnv', () => {
     const prod = {
       ...validEnv,
       NODE_ENV: 'production',
-      PAYMENT_PROVIDER: 'mercadopago',
-      MP_ACCESS_TOKEN: 't',
-      MP_WEBHOOK_SECRET: 's',
+      ALLOW_FAKE_PAYMENTS: 'true',
     };
     const s3 = {
       S3_REGION: 'sa-east-1',
@@ -162,28 +160,13 @@ describe('parseEnv', () => {
     ]);
   });
 
-  it('exige MP_ACCESS_TOKEN e MP_WEBHOOK_SECRET com PAYMENT_PROVIDER=mercadopago', () => {
-    const error = failure({ ...validEnv, PAYMENT_PROVIDER: 'mercadopago' });
-    expect(error.issues.map((i) => i.variable).sort()).toEqual([
-      'MP_ACCESS_TOKEN',
-      'MP_WEBHOOK_SECRET',
-    ]);
-    expect(error.message).toContain('obrigatória quando PAYMENT_PROVIDER=mercadopago');
-  });
-
-  it('aceita mercadopago com as credenciais', () => {
-    const env = parseEnv({
-      ...validEnv,
-      PAYMENT_PROVIDER: 'mercadopago',
-      MP_ACCESS_TOKEN: 'token',
-      MP_WEBHOOK_SECRET: 'segredo',
-    });
-    expect(env.PAYMENT_PROVIDER).toBe('mercadopago');
-    expect(env.MP_ACCESS_TOKEN).toBe('token');
-  });
-
-  it('não exige MP_* no modo fake', () => {
+  it('o modo fake não exige credencial de provedor', () => {
     expect(() => parseEnv({ ...validEnv, PAYMENT_PROVIDER: 'fake' })).not.toThrow();
+  });
+
+  it('rejeita provedor desconhecido (o Mercado Pago foi removido)', () => {
+    const error = failure({ ...validEnv, PAYMENT_PROVIDER: 'mercadopago' });
+    expect(error.issues.map((i) => i.variable)).toEqual(['PAYMENT_PROVIDER']);
   });
 
   describe('provedor fake em produção', () => {
@@ -235,19 +218,9 @@ describe('parseEnv', () => {
       expect(error.issues.map((i) => i.variable)).toEqual(['ALLOW_FAKE_PAYMENTS']);
     });
 
-    it('fora de produção o fake é livre; em produção o mercadopago também', () => {
+    it('fora de produção o fake é livre', () => {
       expect(() => parseEnv({ ...validEnv, NODE_ENV: 'development' })).not.toThrow();
       expect(() => parseEnv(validEnv)).not.toThrow();
-      expect(() =>
-        parseEnv({
-          ...validEnv,
-          ...s3Prod,
-          NODE_ENV: 'production',
-          PAYMENT_PROVIDER: 'mercadopago',
-          MP_ACCESS_TOKEN: 't',
-          MP_WEBHOOK_SECRET: 's',
-        }),
-      ).not.toThrow();
     });
   });
 

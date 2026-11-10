@@ -184,7 +184,7 @@ describe('falha do gateway', () => {
     expect(Object.keys(res.body.error.details)).toEqual(['orderId']);
   });
 
-  it('retry depois que a Preference já expirou (created_at + 30 min): 502, sem chamar o gateway', async () => {
+  it('retry depois que a cobrança já expirou (created_at + 30 min): 502, sem chamar o gateway', async () => {
     const key = randomUUID();
     gateway.failNextCheckout(1);
     await post(key);

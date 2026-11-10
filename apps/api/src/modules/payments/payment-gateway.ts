@@ -34,7 +34,7 @@ export interface Payment {
 }
 
 export interface PaymentGateway {
-  readonly name: 'mercadopago' | 'fake';
+  readonly name: 'abacatepay' | 'fake';
   createCheckout(req: CheckoutRequest): Promise<CheckoutResult>;
   getPayment(paymentId: string): Promise<Payment>;
 }

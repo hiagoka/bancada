@@ -231,19 +231,19 @@ describe('constraints de payment_events', () => {
     );
 
   it('rejeita (provider, payment_id, status) duplicado', async () => {
-    await insertEvent('mercadopago', '123', 'approved');
-    expect(await violation(insertEvent('mercadopago', '123', 'approved'))).toMatchObject({
+    await insertEvent('fake', '123', 'approved');
+    expect(await violation(insertEvent('fake', '123', 'approved'))).toMatchObject({
       code: UNIQUE,
       constraint: 'payment_events_dedupe_key',
     });
   });
 
   it('aceita o mesmo pagamento com outro status e ON CONFLICT DO NOTHING não insere', async () => {
-    await insertEvent('mercadopago', '123', 'pending');
-    await expect(insertEvent('mercadopago', '123', 'approved')).resolves.toBeDefined();
+    await insertEvent('fake', '123', 'pending');
+    await expect(insertEvent('fake', '123', 'approved')).resolves.toBeDefined();
     const dup = await pool.query(
       `INSERT INTO payment_events (provider, payment_id, status, amount_cents)
-       VALUES ('mercadopago', '123', 'approved', 1000) ON CONFLICT DO NOTHING`,
+       VALUES ('fake', '123', 'approved', 1000) ON CONFLICT DO NOTHING`,
     );
     expect(dup.rowCount).toBe(0);
   });

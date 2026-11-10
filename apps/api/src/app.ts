@@ -37,8 +37,6 @@ export interface AppDeps {
   webUrl: string;
   storage: StorageService;
   gateway: PaymentGateway;
-  // Segredo do webhook do Mercado Pago; sem ele a rota /webhooks/mercadopago não é montada.
-  webhookSecret?: string;
   jwtSecret: string;
   cookieSameSite: 'lax' | 'none';
   // Cookie Secure (produção). Com cookieSameSite='none' é sempre Secure.
@@ -57,7 +55,6 @@ export function createApp({
   webUrl,
   storage,
   gateway,
-  webhookSecret,
   now,
   jwtSecret,
   cookieSameSite,
@@ -147,7 +144,6 @@ export function createApp({
       pool,
       logger,
       webhookService: new PaymentWebhookService({ pool, gateway, logger }),
-      webhookSecret,
       fakeGateway: gateway instanceof FakePaymentGateway ? gateway : undefined,
     }),
   );

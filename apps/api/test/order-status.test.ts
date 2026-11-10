@@ -1,26 +1,26 @@
 import {
   ALLOWED_TRANSITIONS,
   canTransition,
-  mpStatusToOrderStatus,
+  paymentStatusToOrderStatus,
 } from '../src/modules/orders/order-status.js';
 
-describe('mpStatusToOrderStatus', () => {
+describe('paymentStatusToOrderStatus', () => {
   it.each([
     ['approved', 'PAID'],
     ['cancelled', 'CANCELLED'],
     ['refunded', 'REFUNDED'],
     ['charged_back', 'REFUNDED'],
-  ])('%s -> %s', (mp, target) => {
-    expect(mpStatusToOrderStatus(mp)).toBe(target);
+  ])('%s -> %s', (status, target) => {
+    expect(paymentStatusToOrderStatus(status)).toBe(target);
   });
 
-  it.each(['pending', 'in_process', 'authorized', 'rejected'])('%s -> nenhum alvo', (mp) => {
-    expect(mpStatusToOrderStatus(mp)).toBeNull();
+  it.each(['pending', 'in_process', 'authorized', 'rejected'])('%s -> nenhum alvo', (status) => {
+    expect(paymentStatusToOrderStatus(status)).toBeNull();
   });
 
   it('status desconhecido -> nenhum alvo', () => {
-    expect(mpStatusToOrderStatus('algo_novo')).toBeNull();
-    expect(mpStatusToOrderStatus('')).toBeNull();
+    expect(paymentStatusToOrderStatus('algo_novo')).toBeNull();
+    expect(paymentStatusToOrderStatus('')).toBeNull();
   });
 });
 
