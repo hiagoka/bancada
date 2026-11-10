@@ -20,9 +20,9 @@ O que ele prova, com testes contra um PostgreSQL real:
 
 ### Loja
 
-![Catálogo da Bancada: grade assimétrica de produtos com preço em fonte monoespaçada e selos de estoque baixo](docs/screenshots/01-catalogo.jpg)
+![Catálogo da Bancada: grade assimétrica de produtos com preço em fonte monoespaçada e botão de adicionar ao carrinho](docs/screenshots/01-catalogo.jpg)
 
-_Catálogo, com selo de estoque baixo e produtos sem imagem mostrando o ícone da categoria._
+_Catálogo: produtos sem imagem mostram o ícone da categoria, e produtos com estoque baixo ganham um selo._
 
 ![Carrinho com a lista de itens, controle de quantidade limitado ao estoque e o total](docs/screenshots/02-carrinho.jpg)
 
@@ -50,9 +50,9 @@ _Lista de produtos, com busca por nome e filtro de situação._
 
 _Painel de estoque: ajuste com sinal e o histórico (o livro-razão) das últimas movimentações._
 
-![Lista de pedidos do admin com cliente, itens, total, situação e o botão Cancelar pedido](docs/screenshots/08-admin-pedidos.jpg)
+![Lista de pedidos do admin com cliente, itens, total e um pedido com o selo Pago](docs/screenshots/08-admin-pedidos.jpg)
 
-_Pedidos, com filtro por situação; o botão "Cancelar pedido" só aparece quando o servidor diz que é possível._
+_Pedidos, com filtro por situação. Um pedido pago não tem ação; o botão "Cancelar pedido" só aparece quando o servidor diz que o pedido é cancelável (PENDING há mais de 30 minutos)._
 
 ## Como funciona
 
