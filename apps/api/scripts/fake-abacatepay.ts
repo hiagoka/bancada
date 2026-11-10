@@ -80,6 +80,45 @@ export interface FakeAbacatePayServer {
   close: () => Promise<void>;
 }
 
+// Esta ferramenta paga cobranças sem dinheiro nenhum: nunca pode rodar em produção.
+export function assertDevelopmentOnly(env: { NODE_ENV?: string | undefined }): void {
+  if (env.NODE_ENV === 'production') {
+    throw new Error(
+      'A AbacatePay FALSA é só para desenvolvimento e recusa rodar com NODE_ENV=production.',
+    );
+  }
+}
+
+export function startupBanner(info: {
+  url: string;
+  origin: string;
+  webhookUrl: string;
+  hasSecret: boolean;
+}): string[] {
+  const lines = [
+    'AbacatePay FALSA (desenvolvimento) no ar',
+    `  API:      ${info.url}   (ABACATEPAY_API_URL)`,
+    `  Pagar:    POST ${info.origin}/__pay/<id da cobrança, pix_char_...>`,
+    `  Webhook:  ${info.webhookUrl}`,
+    '  QR Code:  o QR Code deste servidor NÃO é escaneável (PNG de desenvolvimento): pague pelo /__pay.',
+  ];
+  if (!info.hasSecret) {
+    lines.push(
+      '  ATENÇÃO: ABACATEPAY_WEBHOOK_SECRET não está definido: o /__pay vai responder 500.',
+    );
+  }
+  return lines;
+}
+
+// O /__pay só atende o próprio computador: um site qualquer aberto no navegador (DNS rebinding ou um
+// POST simples a http://localhost:4010) não consegue pagar cobranças.
+const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost']);
+function isLocalHost(hostHeader: string | undefined): boolean {
+  if (!hostHeader) return false;
+  const hostname = hostHeader.replace(/:\d+$/, '').toLowerCase();
+  return LOCAL_HOSTS.has(hostname);
+}
+
 export function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'content-type': 'application/json' });
   res.end(JSON.stringify(body));
@@ -416,6 +455,10 @@ export async function startFakeAbacatePay(
         }
         const payMatch = /^\/__pay\/([^/]+)$/.exec(url.pathname);
         if (recorded.method === 'POST' && payMatch) {
+          if (!isLocalHost(req.headers.host)) {
+            sendJson(res, 403, { error: 'O /__pay só aceita Host 127.0.0.1 ou localhost' });
+            return;
+          }
           await pay(decodeURIComponent(payMatch[1]!), res);
           return;
         }

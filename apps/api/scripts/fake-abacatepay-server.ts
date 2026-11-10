@@ -21,7 +21,14 @@
 // (ABACATEPAY_FAKE_WEBHOOK_URL, padrão http://127.0.0.1:3333/webhooks/abacatepay) com
 // X-Webhook-Secret (ABACATEPAY_WEBHOOK_SECRET do ambiente) e X-Webhook-Signature (HMAC-SHA256 do
 // corpo cru, com o mesmo módulo de assinatura da API). A página do pedido vira "Pago" sozinha.
-import { DEFAULT_FAKE_WEBHOOK_URL, startFakeAbacatePay } from './fake-abacatepay.js';
+import {
+  DEFAULT_FAKE_WEBHOOK_URL,
+  assertDevelopmentOnly,
+  startFakeAbacatePay,
+  startupBanner,
+} from './fake-abacatepay.js';
+
+assertDevelopmentOnly(process.env);
 
 const port = Number(process.env.ABACATEPAY_FAKE_PORT ?? 4010);
 const webhookUrl = process.env.ABACATEPAY_FAKE_WEBHOOK_URL ?? DEFAULT_FAKE_WEBHOOK_URL;
@@ -35,13 +42,13 @@ const server = await startFakeAbacatePay({
   strict: true,
 });
 
-const out = (line: string): void => void process.stdout.write(`${line}\n`);
-out('AbacatePay FALSA (desenvolvimento) no ar');
-out(`  API:      ${server.url}   (ABACATEPAY_API_URL)`);
-out(`  Pagar:    POST ${server.origin}/__pay/<id da cobrança>`);
-out(`  Webhook:  ${webhookUrl}`);
-if (!webhookSecret) {
-  out('  ATENÇÃO:  ABACATEPAY_WEBHOOK_SECRET não está definido: o /__pay vai responder 500.');
+for (const line of startupBanner({
+  url: server.url,
+  origin: server.origin,
+  webhookUrl,
+  hasSecret: webhookSecret !== undefined,
+})) {
+  process.stdout.write(`${line}\n`);
 }
 
 function shutdown(): void {

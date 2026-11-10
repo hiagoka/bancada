@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { createServer, type Server } from 'node:http';
+import { createServer, request as httpRequest, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { inflateSync } from 'node:zlib';
 import request from 'supertest';
@@ -9,7 +9,9 @@ import { AbacatePayGateway } from '../src/modules/payments/abacatepay.gateway.js
 import { verifyAbacatePayWebhook } from '../src/modules/payments/abacatepay.signature.js';
 import { FakeStorageService } from '../src/modules/storage/fake.storage.js';
 import {
+  assertDevelopmentOnly,
   renderPlaceholderQrPng,
+  startupBanner,
   startFakeAbacatePay,
   type FakeAbacatePayServer,
 } from '../scripts/fake-abacatepay.js';
@@ -193,6 +195,51 @@ describe('POST /__pay/:id', () => {
     expect(deliveries).toHaveLength(1);
   });
 
+  async function payWithHost(id: string, host: string): Promise<number> {
+    return new Promise((resolve, reject) => {
+      const url = new URL(payUrl(id));
+      const req = httpRequest(
+        {
+          hostname: url.hostname,
+          port: url.port,
+          path: url.pathname,
+          method: 'POST',
+          headers: { Host: host },
+        },
+        (res) => {
+          res.resume();
+          res.on('end', () => resolve(res.statusCode ?? 0));
+        },
+      );
+      req.on('error', reject);
+      req.end();
+    });
+  }
+
+  it.each([
+    'evil.example',
+    'evil.example:4010',
+    '127.0.0.1.evil.example',
+    'localhost.evil.example',
+    '192.168.0.14:4010',
+  ])(
+    'o /__pay recusa Host que não seja 127.0.0.1 ou localhost (%j): 403, nada é pago nem entregue',
+    async (host) => {
+      const { checkoutId } = await gateway().createCheckout(checkoutRequest());
+      expect(await payWithHost(checkoutId, host)).toBe(403);
+      expect(deliveries).toHaveLength(0);
+      expect((await gateway().getPayment(checkoutId)).rawStatus).toBe('PENDING');
+    },
+  );
+
+  it.each(['127.0.0.1', '127.0.0.1:4010', 'localhost', 'localhost:4010'])(
+    'o /__pay aceita Host %s',
+    async (host) => {
+      const { checkoutId } = await gateway().createCheckout(checkoutRequest());
+      expect(await payWithHost(checkoutId, host)).toBe(200);
+    },
+  );
+
   it('só aceita POST', async () => {
     const { checkoutId } = await gateway().createCheckout(checkoutRequest());
     expect((await fetch(payUrl(checkoutId))).status).toBe(404);
@@ -243,6 +290,40 @@ describe('POST /__pay/:id', () => {
     } finally {
       await noSecret.close();
     }
+  });
+});
+
+describe('trava e aviso de partida', () => {
+  it('recusa rodar com NODE_ENV=production', () => {
+    expect(() => assertDevelopmentOnly({ NODE_ENV: 'production' })).toThrow(/produção|production/i);
+  });
+
+  it.each([undefined, 'development', 'test'])('aceita NODE_ENV=%s', (env) => {
+    expect(() => assertDevelopmentOnly({ NODE_ENV: env })).not.toThrow();
+  });
+
+  it('o aviso de partida diz que o QR Code NÃO é escaneável e como pagar', () => {
+    const text = startupBanner({
+      url: 'http://127.0.0.1:4010/v2',
+      origin: 'http://127.0.0.1:4010',
+      webhookUrl: 'http://127.0.0.1:3333/webhooks/abacatepay',
+      hasSecret: true,
+    }).join('\n');
+    expect(text).toContain('NÃO é escaneável');
+    expect(text).toContain('/__pay/');
+    expect(text).toContain('http://127.0.0.1:3333/webhooks/abacatepay');
+    expect(text).not.toContain('ATENÇÃO: ABACATEPAY_WEBHOOK_SECRET');
+  });
+
+  it('sem segredo, o aviso alerta que o /__pay vai responder 500', () => {
+    const text = startupBanner({
+      url: 'http://127.0.0.1:4010/v2',
+      origin: 'http://127.0.0.1:4010',
+      webhookUrl: 'x',
+      hasSecret: false,
+    }).join('\n');
+    expect(text).toContain('ABACATEPAY_WEBHOOK_SECRET');
+    expect(text).toContain('500');
   });
 });
 
