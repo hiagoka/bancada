@@ -202,8 +202,8 @@ export async function setCheckoutIfMissing(
   db: Db,
   orderId: string,
   checkout: CheckoutRecord,
-): Promise<void> {
-  await db.query(
+): Promise<boolean> {
+  const result = await db.query(
     `UPDATE orders
      SET checkout_id = $2, checkout_url = $3, pix_code = $4, pix_qr_image = $5, pix_expires_at = $6,
          updated_at = now()
@@ -217,6 +217,8 @@ export async function setCheckoutIfMissing(
       checkout.pix?.expiresAt ?? null,
     ],
   );
+  // false = outra requisição já tinha gravado o checkout (esta cobrança ficou sem pedido).
+  return result.rowCount === 1;
 }
 
 // --- Admin -----------------------------------------------------------------------------------

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import pino, { type Logger } from 'pino';
 import request from 'supertest';
 import { createApp } from '../src/app.js';
 import { createPool } from '../src/db/pool.js';
@@ -191,5 +192,113 @@ describe('POST /orders com a AbacatePay', () => {
     const paid = await request(app).get(`/orders/${id}`);
     expect(paid.body.data.pix).toBeNull();
     expect(JSON.stringify(paid.body)).not.toContain(FAKE_BR_CODE);
+  });
+});
+
+describe('conciliação: o id da cobrança é logado ANTES de gravar (sem idempotência no provedor)', () => {
+  function capture() {
+    const lines: string[] = [];
+    const logger = pino({ level: 'debug' }, { write: (l: string) => void lines.push(l) });
+    const logged = () => lines.map((l) => JSON.parse(l) as Record<string, unknown>);
+    return { lines, logger, logged };
+  }
+
+  function appWith(logger: Logger) {
+    return createApp({
+      ...authDeps,
+      pool,
+      logger,
+      webUrl,
+      storage: new FakeStorageService(),
+      gateway: new AbacatePayGateway({ apiKey: API_KEY, apiUrl: fake.url }),
+    });
+  }
+
+  async function postTo(target: ReturnType<typeof createApp>, key: string) {
+    return request(target)
+      .post('/orders')
+      .set('Idempotency-Key', key)
+      .send({ customer, items: [{ productId: await productId('mouse'), quantity: 1 }] });
+  }
+
+  it('loga (warn) o id da cobrança, o pedido e o provedor, sem QR Code, brCode nem chave', async () => {
+    const { lines, logger, logged } = capture();
+    const res = await postTo(appWith(logger), randomUUID());
+    expect(res.status).toBe(201);
+    const [row] = (await pool.query('SELECT id, checkout_id FROM orders')).rows;
+    const entry = logged().find((l) => l.checkoutId === row.checkout_id);
+    expect(entry).toMatchObject({ level: 40, orderId: row.id, provider: 'abacatepay' });
+    const out = lines.join('\n');
+    expect(out).not.toContain(FAKE_BR_CODE);
+    expect(out).not.toContain(FAKE_QR_IMAGE);
+    expect(out).not.toContain(API_KEY);
+  });
+
+  it('se o UPDATE falha depois de a AbacatePay responder, o id da cobrança já está no log', async () => {
+    const { logger, logged } = capture();
+    const target = appWith(logger);
+    const original = pool.query.bind(pool);
+    const spy = jest.spyOn(pool, 'query').mockImplementation(((
+      sql: unknown,
+      ...rest: unknown[]
+    ) => {
+      if (typeof sql === 'string' && sql.includes('UPDATE orders') && sql.includes('checkout_id')) {
+        return Promise.reject(new Error('banco caiu'));
+      }
+      return (original as (...a: unknown[]) => unknown)(sql, ...rest);
+    }) as typeof pool.query);
+    try {
+      const res = await postTo(target, randomUUID());
+      expect(res.status).toBe(502);
+    } finally {
+      spy.mockRestore();
+    }
+    const created = fake.requests.filter((r) => r.path.endsWith('/transparents/create'));
+    expect(created).toHaveLength(1);
+    const checkoutIds = logged()
+      .map((l) => l.checkoutId)
+      .filter((id): id is string => typeof id === 'string');
+    expect(checkoutIds).toHaveLength(1);
+    expect(checkoutIds[0]).toMatch(/^pix_char_fake/);
+    expect((await pool.query('SELECT checkout_id FROM orders')).rows).toEqual([
+      { checkout_id: null },
+    ]);
+  });
+
+  it('3 requisições simultâneas com a mesma chave: UM pedido; cada cobrança a mais fica registrada como órfã', async () => {
+    const { logger, logged } = capture();
+    const target = appWith(logger);
+    fake.responder = async (req) => {
+      if (req.path.endsWith('/transparents/create')) {
+        await new Promise((resolve) => setTimeout(resolve, 150)); // alarga a janela da corrida
+      }
+      return 'default' as const;
+    };
+    const key = randomUUID();
+    const results = await Promise.all([
+      postTo(target, key),
+      postTo(target, key),
+      postTo(target, key),
+    ]);
+    expect(results.every((r) => r.status === 200 || r.status === 201)).toBe(true);
+    expect((await pool.query('SELECT count(*)::int AS n FROM orders')).rows[0].n).toBe(1);
+    expect(
+      (await pool.query(`SELECT count(*)::int AS n FROM stock_movements WHERE reason = 'order'`))
+        .rows[0].n,
+    ).toBe(1);
+
+    const [row] = (await pool.query('SELECT checkout_id FROM orders')).rows;
+    const created = fake.requests.filter((r) => r.path.endsWith('/transparents/create')).length;
+    expect(row.checkout_id).toMatch(/^pix_char_fake/);
+    const orphans = logged().filter((l) => String(l.msg).includes('órfã'));
+    // toda cobrança além da que ficou no pedido foi registrada para conciliação
+    expect(orphans).toHaveLength(created - 1);
+    for (const orphan of orphans) {
+      expect(orphan.checkoutId).not.toBe(row.checkout_id);
+      expect(orphan.checkoutId).toMatch(/^pix_char_fake/);
+    }
+    // e todas as respostas mostram o MESMO Pix, o que ficou gravado
+    const pixCodes = new Set(results.map((r) => JSON.stringify(r.body.data.pix)));
+    expect(pixCodes.size).toBe(1);
   });
 });

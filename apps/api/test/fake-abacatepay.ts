@@ -14,7 +14,7 @@ export interface RecordedRequest {
 export type Responder = (
   req: RecordedRequest,
   res: ServerResponse,
-) => void | Promise<void> | 'default';
+) => void | 'default' | Promise<void | 'default'>;
 
 export interface FakeAbacatePay {
   url: string;

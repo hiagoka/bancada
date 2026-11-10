@@ -257,7 +257,20 @@ export class OrdersService {
         totalCents: order.totalCents,
         expiresAt,
       });
-      await setCheckoutIfMissing(this.deps.pool, order.id, checkout);
+      // O provedor não tem idempotência por pedido: se o processo cair entre a resposta dele e o
+      // UPDATE abaixo (ou duas requisições com a mesma chave criarem cobranças), sobra uma cobrança
+      // sem pedido. Este log (id da cobrança, sem QR Code, brCode nem chave) permite conciliar.
+      this.deps.logger.warn(
+        { orderId: order.id, provider: this.deps.gateway.name, checkoutId: checkout.checkoutId },
+        'Cobrança criada no provedor (id registrado para conciliação, antes de gravar no pedido)',
+      );
+      const saved = await setCheckoutIfMissing(this.deps.pool, order.id, checkout);
+      if (!saved) {
+        this.deps.logger.warn(
+          { orderId: order.id, provider: this.deps.gateway.name, checkoutId: checkout.checkoutId },
+          'Cobrança órfã: outra requisição gravou o checkout deste pedido primeiro (conciliar com o provedor)',
+        );
+      }
     } catch (err) {
       // O provedor exige um prazo mínimo para criar a cobrança: faltando menos que isso, o retry
       // nunca mais funciona e o web precisa gerar uma chave nova (mesmo desfecho da D19).
