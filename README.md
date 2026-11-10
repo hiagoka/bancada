@@ -259,3 +259,49 @@ Modelos: [`apps/api/.env.example`](apps/api/.env.example) e [`apps/web/.env.exam
 | `LOG_LEVEL`                                                                                                                 | Nível do Pino (padrão `info`).                                                                                                                                                      |
 | `SEED_ON_START`                                                                                                             | Só na imagem Docker: `true` roda o seed antes de subir a API (o compose liga).                                                                                                      |
 | `VITE_API_URL` (web)                                                                                                        | URL da API que o navegador usa. No build de produção é obrigatória e **vira parte do bundle**: outra URL exige refazer a imagem.                                                    |
+
+## Modos de pagamento
+
+O gateway fica atrás de uma interface (`PaymentGateway`), e a variável `PAYMENT_PROVIDER` escolhe a implementação.
+
+### Modo fake (padrão)
+
+`PAYMENT_PROVIDER=fake` não precisa de credenciais. É o modo dos testes, do Docker Compose e do desenvolvimento.
+
+- O checkout leva para uma página simulada da própria loja, `/checkout-simulado/:id`, com uma faixa "MODO SIMULADO: nenhum dinheiro real é cobrado" e quatro botões: **Aprovar pagamento**, **Recusar pagamento**, **Cancelar pedido** e **Pagar valor diferente** (paga `total - R$ 10,00`, ou `total + R$ 1,00` se o total for menor que R$ 10, para exercitar o `amount_mismatch`).
+- Os botões chamam `POST /dev/payments/simulate`, que passa pelo **mesmo** tratamento de notificação do webhook real (mesma máquina de estados, mesma deduplicação, mesmos movimentos de estoque). Também dá para chamar à mão:
+
+  ```bash
+  curl -X POST http://localhost:3333/dev/payments/simulate \
+    -H 'Content-Type: application/json' \
+    -d '{"orderId":"<id do pedido>","status":"approved"}'
+  ```
+
+  `status` aceita `approved`, `pending`, `in_process`, `authorized`, `rejected`, `cancelled`, `refunded`, `charged_back` e `in_mediation`; `amountCents` e `paymentId` são opcionais.
+
+- Os pagamentos simulados ficam em memória: reiniciar a API os esquece (os pedidos continuam no banco).
+- Essa rota **só existe com o gateway fake**; com `mercadopago` ela dá 404.
+- **Produção recusa o fake**: com `NODE_ENV=production` e `PAYMENT_PROVIDER=fake` a API não sobe, a menos que `ALLOW_FAKE_PAYMENTS=true` (então apenas avisa em log).
+
+### Modo Mercado Pago (planejado, ainda não verificado)
+
+> **Honestidade:** o código do gateway do Mercado Pago (Preference, consulta do pagamento e validação da assinatura do webhook com o SDK oficial) existe e é coberto por testes com o SDK simulado, mas o **teste ponta a ponta com o Mercado Pago de verdade é a tarefa T22 e ainda não foi feito**. O que segue são instruções do que se pretende fazer, não um resultado verificado. Os nomes de menus do painel do Mercado Pago podem diferir.
+
+Use **somente credenciais de teste**, nunca as de produção, e não versione nenhum valor real.
+
+1. No painel de desenvolvedores do Mercado Pago, crie uma aplicação do Checkout Pro e pegue o **Access Token de teste**. Para pagar, use as contas e os cartões de teste da própria documentação do Mercado Pago.
+2. Exponha a API local com um túnel HTTPS, por exemplo `ngrok http 3333`. A API só envia `notification_url` (e `auto_return`) ao Mercado Pago quando as URLs são HTTPS.
+3. Configure a API (`apps/api/.env`):
+
+   ```bash
+   PAYMENT_PROVIDER=mercadopago
+   MP_ACCESS_TOKEN=<access token de TESTE>
+   MP_WEBHOOK_SECRET=<assinatura secreta do webhook, do painel>
+   API_PUBLIC_URL=https://<seu-túnel>.ngrok-free.app
+   WEB_URL=http://localhost:5173
+   ```
+
+4. No painel, cadastre a URL do webhook como `<API_PUBLIC_URL>/webhooks/mercadopago`, assine o evento de **pagamentos** e copie o segredo de assinatura para `MP_WEBHOOK_SECRET`. Sem esse segredo a rota do webhook nem é registrada.
+5. Faça uma compra: o checkout cria a Preference (`external_reference` = id do pedido, itens em reais, expira em 30 minutos, `back_urls` para `WEB_URL/pedido/:id`), o cliente paga no Mercado Pago e o webhook atualiza o pedido. A página do pedido ignora os parâmetros que o Mercado Pago anexa ao retorno e mostra só o status que vem da API.
+
+O webhook valida a assinatura (`401 INVALID_SIGNATURE` se falhar), **busca o pagamento no provedor** em vez de confiar no corpo e responde `200` para notificações que não são de pagamento. Um erro de provedor vira `5xx`, para o Mercado Pago reenviar.
