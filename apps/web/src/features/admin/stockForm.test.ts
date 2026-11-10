@@ -82,7 +82,10 @@ describe('describeStockError', () => {
   it.each([
     [new ApiError(404, 'NOT_FOUND', 'x'), 'Produto não encontrado. Ele pode ter sido removido.'],
     [new ApiError(400, 'VALIDATION_ERROR', 'x'), 'Confira os campos do ajuste e tente de novo.'],
-    [new NetworkError(), 'A API está fora do ar. Verifique sua conexão e tente de novo.'],
+    [
+      new NetworkError(),
+      'A API não respondeu e o ajuste pode ter sido aplicado. Confira o histórico de movimentações antes de repetir.',
+    ],
     [new Error('boom'), 'Não foi possível ajustar o estoque. Tente de novo em instantes.'],
   ])('%s', (error, message) => {
     expect(describeStockError(error, 4)).toBe(message);

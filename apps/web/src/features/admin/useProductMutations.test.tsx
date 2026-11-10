@@ -4,6 +4,7 @@ import { act, renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { adjustAdminStock, createAdminProduct, updateAdminProduct } from '../../api/adminProducts';
+import { NetworkError } from '../../api/http';
 import { createQueryClient } from '../../app/queryClient';
 import { useAdjustStock, useCreateProduct, useUpdateProduct } from './useProductMutations';
 
@@ -106,6 +107,18 @@ describe('useAdjustStock', () => {
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['admin', 'products'] });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['admin', 'product', ID] });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['products'] });
+  });
+
+  it('falha de rede: recarrega o detalhe (histórico) para o admin conferir se o ajuste foi aplicado', async () => {
+    mockAdjust.mockRejectedValue(new NetworkError());
+    const client = createQueryClient();
+    const invalidate = vi.spyOn(client, 'invalidateQueries');
+    const { result } = renderHook(() => useAdjustStock(ID), { wrapper: wrap(client) });
+    await act(async () => {
+      await result.current.mutateAsync({ delta: 5, reason: 'restock' }).catch(() => undefined);
+    });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['admin', 'product', ID] });
+    expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ['products'] });
   });
 
   it('erro (409): nada é invalidado', async () => {

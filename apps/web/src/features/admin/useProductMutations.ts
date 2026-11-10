@@ -6,6 +6,7 @@ import type {
   StockAdjustmentResult,
 } from '@bancada/contracts';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { NetworkError } from '../../api/http';
 import { adjustAdminStock, createAdminProduct, updateAdminProduct } from '../../api/adminProducts';
 import { PRODUCTS_QUERY_KEY } from '../catalog/useProducts';
 import { useAdminMutation } from './useAdminMutation';
@@ -34,6 +35,12 @@ export function useUpdateProduct(id: string) {
     mutationKey: ['product', 'update'],
     mutationFn: (patch) => updateAdminProduct(id, patch),
     onSuccess: () => invalidateProductCaches(client, id),
+    // Sem resposta, o ajuste pode ter sido aplicado: recarrega o histórico para conferir.
+    onError: (error) => {
+      if (error instanceof NetworkError) {
+        return client.invalidateQueries({ queryKey: ['admin', 'product', id] });
+      }
+    },
   });
 }
 
@@ -44,5 +51,11 @@ export function useAdjustStock(id: string) {
     mutationKey: ['stock', 'adjust'],
     mutationFn: (adjustment) => adjustAdminStock(id, adjustment),
     onSuccess: () => invalidateProductCaches(client, id),
+    // Sem resposta, o ajuste pode ter sido aplicado: recarrega o histórico para o admin conferir.
+    onError: (error) => {
+      if (error instanceof NetworkError) {
+        return client.invalidateQueries({ queryKey: ['admin', 'product', id] });
+      }
+    },
   });
 }

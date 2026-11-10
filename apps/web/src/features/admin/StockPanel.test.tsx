@@ -138,7 +138,9 @@ describe('StockPanel: ajuste', () => {
     renderPanel();
     await user.type(delta(), '1');
     await submit();
-    expect((await screen.findByRole('alert')).textContent).toContain('A API está fora do ar.');
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      'Confira o histórico de movimentações antes de repetir.',
+    );
   });
 
   it('401: derruba a sessão (zera ["admin","me"])', async () => {

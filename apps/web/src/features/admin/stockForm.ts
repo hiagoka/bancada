@@ -48,7 +48,9 @@ export function describeStockError(error: unknown, currentStock: number): string
     if (error.code === 'VALIDATION_ERROR') return 'Confira os campos do ajuste e tente de novo.';
   }
   if (error instanceof NetworkError) {
-    return 'A API está fora do ar. Verifique sua conexão e tente de novo.';
+    // O ajuste não tem idempotência: sem resposta não dá para saber se foi aplicado. Repetir às cegas
+    // poderia ajustar duas vezes.
+    return 'A API não respondeu e o ajuste pode ter sido aplicado. Confira o histórico de movimentações antes de repetir.';
   }
   return 'Não foi possível ajustar o estoque. Tente de novo em instantes.';
 }
