@@ -119,6 +119,14 @@ const envSchema = envObject
           });
         }
       }
+      // A chave de API vai no header Authorization: em produção só por https.
+      if (env.NODE_ENV === 'production' && new URL(env.ABACATEPAY_API_URL).protocol !== 'https:') {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['ABACATEPAY_API_URL'],
+          message: 'deve usar https em produção (a chave de API iria em texto claro)',
+        });
+      }
       if (env.ABACATEPAY_WEBHOOK_SECRET && env.ABACATEPAY_WEBHOOK_SECRET.length < 32) {
         ctx.addIssue({
           code: 'custom',
@@ -166,13 +174,26 @@ export type Env = z.infer<typeof envSchema>;
 // ambiente que a identifica.
 export function paymentConfigWarnings(env: Env): string[] {
   const warnings: string[] = [];
-  if (
-    env.PAYMENT_PROVIDER === 'abacatepay' &&
-    env.NODE_ENV === 'production' &&
-    env.ABACATEPAY_API_KEY?.startsWith('abc_dev_')
-  ) {
+  const key = env.ABACATEPAY_API_KEY;
+  if (env.PAYMENT_PROVIDER !== 'abacatepay' || !key) return warnings;
+
+  const production = env.NODE_ENV === 'production';
+  if (key.startsWith('abc_dev_')) {
+    if (production) {
+      warnings.push(
+        'ABACATEPAY_API_KEY é uma chave de TESTE (abc_dev_) com NODE_ENV=production: nenhum pagamento real será cobrado',
+      );
+    }
+  } else if (key.startsWith('abc_prod_')) {
+    if (!production) {
+      warnings.push(
+        'ABACATEPAY_API_KEY é uma chave de PRODUÇÃO (abc_prod_) com NODE_ENV diferente de production: cobrança REAL (dinheiro de verdade) fora de produção',
+      );
+    }
+  } else {
+    // Não derruba o processo (a AbacatePay pode mudar o formato), mas o ambiente fica sem prova.
     warnings.push(
-      'ABACATEPAY_API_KEY é uma chave de TESTE (abc_dev_) com NODE_ENV=production: nenhum pagamento real será cobrado',
+      'ABACATEPAY_API_KEY não começa com abc_dev_ nem com abc_prod_: não dá para saber se é chave de teste ou de produção',
     );
   }
   return warnings;

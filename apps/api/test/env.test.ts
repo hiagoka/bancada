@@ -219,6 +219,67 @@ describe('parseEnv', () => {
       expect(() => parseEnv({ ...validEnv, PAYMENT_PROVIDER: 'fake' })).not.toThrow();
     });
 
+    describe('ABACATEPAY_API_URL em produção exige https (a chave de API vai no header)', () => {
+      const prod = {
+        ...abacate,
+        NODE_ENV: 'production',
+        S3_REGION: 'r',
+        S3_BUCKET: 'b',
+        S3_ACCESS_KEY_ID: 'k',
+        S3_SECRET_ACCESS_KEY: 's',
+        S3_PUBLIC_URL: 'https://cdn.example.com',
+        S3_FORCE_PATH_STYLE: 'false',
+      };
+
+      it('http:// em produção é recusada, sem ecoar a chave', () => {
+        const error = failure({ ...prod, ABACATEPAY_API_URL: 'http://api.abacatepay.com/v2' });
+        expect(error.issues).toEqual([
+          {
+            variable: 'ABACATEPAY_API_URL',
+            message: 'deve usar https em produção (a chave de API iria em texto claro)',
+          },
+        ]);
+        expect(error.message).not.toContain('abc_dev_chave-de-teste');
+      });
+
+      it('https:// em produção passa, e o padrão já é https', () => {
+        expect(() =>
+          parseEnv({ ...prod, ABACATEPAY_API_URL: 'https://api.abacatepay.com/v2' }),
+        ).not.toThrow();
+        expect(() => parseEnv(prod)).not.toThrow();
+      });
+
+      it('fora de produção http:// continua valendo (servidor de teste local)', () => {
+        expect(() =>
+          parseEnv({ ...abacate, ABACATEPAY_API_URL: 'http://localhost:4010/v2' }),
+        ).not.toThrow();
+        expect(() =>
+          parseEnv({
+            ...abacate,
+            NODE_ENV: 'development',
+            ABACATEPAY_API_URL: 'http://localhost:4010',
+          }),
+        ).not.toThrow();
+      });
+
+      it('no modo fake a URL não é conferida', () => {
+        expect(() =>
+          parseEnv({
+            ...validEnv,
+            NODE_ENV: 'production',
+            ALLOW_FAKE_PAYMENTS: 'true',
+            ABACATEPAY_API_URL: 'http://qualquer.coisa/v2',
+            S3_REGION: 'r',
+            S3_BUCKET: 'b',
+            S3_ACCESS_KEY_ID: 'k',
+            S3_SECRET_ACCESS_KEY: 's',
+            S3_PUBLIC_URL: 'https://cdn.example.com',
+            S3_FORCE_PATH_STYLE: 'false',
+          }),
+        ).not.toThrow();
+      });
+    });
+
     it('em produção o abacatepay sobe sem ALLOW_FAKE_PAYMENTS', () => {
       expect(() =>
         parseEnv({
@@ -284,6 +345,50 @@ describe('parseEnv', () => {
       });
       expect(paymentConfigWarnings(env)).toEqual([]);
     });
+
+    const abacateEnv = (extra: Record<string, string>) =>
+      parseEnv({
+        ...validEnv,
+        PAYMENT_PROVIDER: 'abacatepay',
+        ABACATEPAY_WEBHOOK_SECRET: 'segredo-do-webhook-com-no-minimo-32-caracteres',
+        S3_REGION: 'r',
+        S3_BUCKET: 'b',
+        S3_ACCESS_KEY_ID: 'k',
+        S3_SECRET_ACCESS_KEY: 's',
+        S3_PUBLIC_URL: 'https://cdn.example.com',
+        S3_FORCE_PATH_STYLE: 'false',
+        ...extra,
+      });
+
+    it.each([
+      ['development', { NODE_ENV: 'development' }],
+      ['test', { NODE_ENV: 'test' }],
+      ['sem NODE_ENV', {}],
+      ['staging', { NODE_ENV: 'staging' }],
+    ])(
+      'chave de PRODUÇÃO (abc_prod_) com NODE_ENV %s: aviso de cobrança real, sem expor a chave',
+      (_n, extra) => {
+        const warnings = paymentConfigWarnings(
+          abacateEnv({ ABACATEPAY_API_KEY: 'abc_prod_segredinho-real', ...extra }),
+        );
+        expect(warnings).toHaveLength(1);
+        expect(warnings[0]).toContain('abc_prod_');
+        expect(warnings[0]).toContain('REAL');
+        expect(warnings[0]).not.toContain('segredinho');
+      },
+    );
+
+    it.each(['xyz_123', 'sk_live_abc', 'ABC_DEV_x', 'chave-sem-prefixo'])(
+      'prefixo desconhecido (%s): só AVISA (não derruba o processo) e nunca imprime a chave',
+      (key) => {
+        const env = abacateEnv({ ABACATEPAY_API_KEY: key });
+        const warnings = paymentConfigWarnings(env);
+        expect(warnings).toHaveLength(1);
+        expect(warnings[0]).toContain('abc_dev_');
+        expect(warnings[0]).toContain('abc_prod_');
+        expect(warnings[0]).not.toContain(key);
+      },
+    );
 
     it('o modo fake não gera aviso de chave', () => {
       expect(paymentConfigWarnings(parseEnv(validEnv))).toEqual([]);
