@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  adjustAdminStock,
   createAdminProduct,
   getAdminProduct,
   listAdminProducts,
@@ -160,6 +161,48 @@ describe('api/adminProducts', () => {
   it('upload: tipo não permitido nem chega à rede', async () => {
     const spy = mockFetch(() => ok({}));
     await expect(requestProductImageUpload('image/gif')).rejects.toThrow();
+    expect(spy).not.toHaveBeenCalled();
+  });
+});
+
+describe('adjustAdminStock', () => {
+  const movement = {
+    id: 7,
+    productId: ID,
+    delta: 5,
+    reason: 'restock',
+    orderId: null,
+    adminId: ID,
+    note: null,
+    stockAfter: 8,
+    createdAt: '2026-10-27T12:00:00.000Z',
+  };
+
+  it('POST /admin/products/:id/stock com delta, reason e note; devolve produto e movimento', async () => {
+    const spy = mockFetch(() => ok({ product: product, movement }));
+    const result = await adjustAdminStock(ID, { delta: 5, reason: 'restock', note: 'caixa nova' });
+    expect(result.movement.stockAfter).toBe(8);
+    const c = call(spy);
+    expect(c.method).toBe('POST');
+    expect(c.url).toMatch(new RegExp(`/admin/products/${ID}/stock$`));
+    expect(c.headers.get('X-Requested-With')).toBe('bancada-web');
+    expect(c.body).toEqual({ delta: 5, reason: 'restock', note: 'caixa nova' });
+  });
+
+  it('sem nota: o corpo não tem note', async () => {
+    const spy = mockFetch(() => ok({ product, movement }));
+    await adjustAdminStock(ID, { delta: -2, reason: 'adjustment' });
+    expect(call(spy).body).toEqual({ delta: -2, reason: 'adjustment' });
+  });
+
+  it.each([
+    [{ delta: 0, reason: 'restock' }],
+    [{ delta: 1.5, reason: 'restock' }],
+    [{ delta: 3, reason: 'order' }],
+  ])('entrada inválida %j nem chega à rede', async (input) => {
+    const spy = mockFetch(() => ok({}));
+    // @ts-expect-error entradas inválidas de propósito
+    await expect(adjustAdminStock(ID, input)).rejects.toThrow();
     expect(spy).not.toHaveBeenCalled();
   });
 });

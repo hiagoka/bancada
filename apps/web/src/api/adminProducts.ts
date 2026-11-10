@@ -3,12 +3,16 @@ import {
   adminProductInputSchema,
   adminProductSchema,
   adminProductUpdateSchema,
+  stockAdjustmentResultSchema,
+  stockAdjustmentSchema,
   uploadRequestSchema,
   uploadResponseSchema,
   type AdminProduct,
   type AdminProductDetail,
   type AdminProductInput,
   type AdminProductUpdate,
+  type StockAdjustment,
+  type StockAdjustmentResult,
   type UploadResponse,
 } from '@bancada/contracts';
 import { z } from 'zod';
@@ -79,5 +83,23 @@ export async function requestProductImageUpload(
     body,
     schema: uploadResponseSchema,
     signal,
+  });
+}
+
+// POST /admin/products/:id/stock: ajuste com sinal (delta <> 0), motivo restock|adjustment e nota.
+// 409 INVALID_STOCK_ADJUSTMENT quando o estoque ficaria negativo (nada muda).
+export async function adjustAdminStock(
+  id: string,
+  adjustment: StockAdjustment,
+): Promise<StockAdjustmentResult> {
+  const parsed = stockAdjustmentSchema.parse(adjustment);
+  return request(`${productPath(id)}/stock`, {
+    method: 'POST',
+    body: {
+      delta: parsed.delta,
+      reason: parsed.reason,
+      ...(parsed.note === undefined ? {} : { note: parsed.note }),
+    },
+    schema: stockAdjustmentResultSchema,
   });
 }
