@@ -53,3 +53,87 @@ _Painel de estoque: ajuste com sinal e o histórico (o livro-razão) das última
 ![Lista de pedidos do admin com cliente, itens, total, situação e o botão Cancelar pedido](docs/screenshots/08-admin-pedidos.jpg)
 
 _Pedidos, com filtro por situação; o botão "Cancelar pedido" só aparece quando o servidor diz que é possível._
+
+## Como funciona
+
+### Pagamento: do pedido ao webhook
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor C as Cliente
+    participant W as Web
+    participant A as API
+    participant D as PostgreSQL
+    participant M as Mercado Pago
+
+    C->>W: Pagar
+    W->>A: POST /orders com Idempotency-Key
+    A->>D: BEGIN e trava os produtos (ORDER BY id FOR UPDATE)
+    A->>D: reconsulta a chave, valida o estoque e soma o total com o preço do banco
+    A->>D: grava pedido, itens e movimentos de estoque, depois COMMIT
+    Note over A,M: o checkout acontece FORA da transação
+    A->>M: cria a Preference (external_reference = id do pedido, expira em 30 min)
+    M-->>A: checkoutUrl
+    A->>D: salva checkout_id e checkout_url
+    A-->>W: 201 com o pedido e a checkoutUrl
+    W->>M: redireciona o cliente para pagar
+    Note over A,M: se a Preference falhar, a API responde 502 e o pedido continua salvo. O retry com a mesma chave conclui o checkout sem duplicar.
+
+    C->>M: paga
+    M->>A: POST /webhooks/mercadopago
+    A->>A: valida a assinatura (401 se inválida)
+    A->>M: busca o pagamento. O corpo do webhook nunca é confiado.
+    A->>D: BEGIN e trava o pedido (FOR UPDATE)
+    A->>D: INSERT em payment_events ON CONFLICT DO NOTHING (deduplica)
+    A->>D: aplica a máquina de estados e grava o outcome, depois COMMIT
+    A-->>M: 200
+    loop a cada 3 s enquanto o pedido está PENDING
+        W->>A: GET /orders/:id
+        A-->>W: status atual
+    end
+    W-->>C: mostra Pago
+```
+
+A mesma `Idempotency-Key` com o mesmo corpo devolve o mesmo pedido (200), sem reservar estoque de novo. Com outro corpo, `409 IDEMPOTENCY_KEY_REUSED`. O `outcome` gravado em cada evento é um de `applied`, `no_change`, `invalid_transition`, `amount_mismatch`, `duplicate`, `order_not_found` ou `payment_not_found`.
+
+### Estoque: um livro-razão
+
+```mermaid
+flowchart TD
+    N["Cadastro do produto (admin)"] -->|"initial"| L
+    P["Pedido criado"] -->|"order, delta negativo"| L
+    W["Webhook cancelled"] -->|"order_cancelled, delta positivo"| L
+    X["Admin cancela pedido PENDING com mais de 30 min"] -->|"order_cancelled, delta positivo"| L
+    J["Admin ajusta o estoque"] -->|"restock ou adjustment, delta com sinal"| L
+    R["Webhook refunded ou charged_back"] -.->|"não devolve estoque (D13)"| Z["nenhum movimento"]
+
+    L["applyStockMovement: UPDATE products SET stock = stock + delta e INSERT em stock_movements, na mesma transação"]
+    L --> S[("products.stock, com constraint stock >= 0")]
+    L --> K[("stock_movements, com stock_after")]
+    S -.- I["Invariante: stock = soma dos deltas dos movimentos do produto"]
+    K -.- I
+```
+
+Toda mudança de estoque passa por `applyStockMovement`; ninguém faz `UPDATE` direto em `products.stock`. O ajuste do admin usa o mesmo `SELECT ... FOR UPDATE` do fluxo de pedido, então ajustes e vendas simultâneos não se atropelam. Hoje não há expiração automática: um pedido abandonado segura o estoque até o admin cancelá-lo (ver [Próximos passos](#próximos-passos)).
+
+### Máquina de estados do pedido
+
+```mermaid
+stateDiagram-v2
+    [*] --> PENDING: pedido criado com o estoque reservado
+    PENDING --> PAID: pagamento approved com valor igual ao total
+    PENDING --> CANCELLED: cancelled no Mercado Pago ou cancelamento manual do admin
+    PAID --> REFUNDED: refunded ou charged_back
+    CANCELLED --> [*]
+    REFUNDED --> [*]
+
+    note right of CANCELLED
+        devolve o estoque (order_cancelled)
+    end note
+    note right of REFUNDED
+        estorno é devolução de dinheiro e não de mercadoria, então NÃO devolve estoque (D13)
+    end note
+```
+
+Só existem três transições: `PENDING → PAID`, `PENDING → CANCELLED` e `PAID → REFUNDED`. Qualquer outra é registrada como `invalid_transition` e não muda nada. Pagamento com valor diferente do total do pedido não é aceito (`amount_mismatch`). `pending`, `in_process`, `authorized` e `rejected` não mudam o pedido (cartão recusado permite nova tentativa no mesmo checkout).
