@@ -122,6 +122,9 @@ jobs:
           test -n "$asset"
           asset_headers=$(curl -fsSI "$WEB$asset" | tr -d '\r')
           grep -qi '^cache-control:.*immutable' <<<"$asset_headers"
+          # gzip: o .js do build volta comprimido para quem aceita (text/javascript e application/javascript)
+          gzip_headers=$(curl -fsSI -H 'Accept-Encoding: gzip' "$WEB$asset" | tr -d '\r')
+          grep -qi '^content-encoding: gzip' <<<"$gzip_headers"
           # asset inexistente é 404 de verdade, não o index.html
           test "$(curl -s -o /dev/null -w '%{http_code}' "$WEB/assets/nao-existe.js")" = "404"
           grep -qi '^x-content-type-options: nosniff' <<<"$html_headers"
