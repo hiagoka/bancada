@@ -13,6 +13,10 @@ export function useAdminOrders(filters: AdminOrdersFilters) {
     queryKey: [...ADMIN_ORDERS_KEY, filters],
     queryFn: ({ signal }) => listAdminOrders(filters, signal),
     placeholderData: keepPreviousData, // trocar de página não esvazia a tabela
+    // Um pedido pago pelo webhook enquanto a tela está aberta não pode continuar com "Cancelar":
+    // atualiza ao voltar o foco para a janela e a cada 60 s (só com a aba visível).
+    refetchOnWindowFocus: true,
+    refetchInterval: 60_000,
   });
 }
 

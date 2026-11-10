@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cancelAdminOrder, listAdminOrders } from '../../api/adminOrders';
 import { ApiError, NetworkError } from '../../api/http';
 import { createQueryClient } from '../../app/queryClient';
@@ -33,6 +33,43 @@ describe('useAdminOrders', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockList).toHaveBeenCalledWith(filters, expect.anything());
     expect(client.getQueryData(['admin', 'orders', filters])).toBeDefined();
+  });
+});
+
+describe('useAdminOrders: a lista se atualiza sozinha (pedido pago pelo webhook perde o "Cancelar")', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    focusManager.setFocused(undefined);
+  });
+
+  const mount = async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    mockList.mockResolvedValue({ items: [], page: 1, pageSize: 20, total: 0 });
+    const client = createQueryClient();
+    const { result } = renderHook(() => useAdminOrders({ status: 'all', page: 1 }), {
+      wrapper: wrap(client),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockList).toHaveBeenCalledTimes(1);
+  };
+
+  it('refaz a consulta a cada 60 s', async () => {
+    await mount();
+    await act(async () => void (await vi.advanceTimersByTimeAsync(59_000)));
+    expect(mockList).toHaveBeenCalledTimes(1);
+    await act(async () => void (await vi.advanceTimersByTimeAsync(2_000)));
+    expect(mockList).toHaveBeenCalledTimes(2);
+  });
+
+  it('refaz a consulta ao voltar o foco para a janela (dados com mais de 30 s)', async () => {
+    await mount();
+    await act(async () => void (await vi.advanceTimersByTimeAsync(31_000)));
+    expect(mockList).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      focusManager.setFocused(false);
+      focusManager.setFocused(true);
+    });
+    await waitFor(() => expect(mockList).toHaveBeenCalledTimes(2));
   });
 });
 
