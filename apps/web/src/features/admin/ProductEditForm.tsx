@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router';
 import { Button, ButtonLink } from '../../components/Button';
 import { useDocumentTitle } from '../../lib/useDocumentTitle';
 import { FormAlert } from './FormAlert';
+import { StockPanel } from './StockPanel';
 import { ImageUpload, type ImageUploadState } from './ImageUpload';
 import {
   buildUpdatePatch,
@@ -167,11 +168,6 @@ export function ProductEditForm({ product }: { product: AdminProductDetail }) {
               </p>
             ) : null}
           </div>
-
-          <div className="field">
-            <span className="admin-form__label">Estoque atual</span>
-            <p className="mono admin-form__value">{product.stock}</p>
-          </div>
         </div>
 
         <div className="admin-form__check">
@@ -196,6 +192,8 @@ export function ProductEditForm({ product }: { product: AdminProductDetail }) {
           {unchanged ? 'Nenhuma alteração para salvar.' : ''}
         </p>
       </form>
+
+      <StockPanel productId={product.id} stock={product.stock} movements={product.movements} />
     </div>
   );
 }

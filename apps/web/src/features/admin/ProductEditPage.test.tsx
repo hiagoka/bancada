@@ -4,7 +4,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getAdminProduct, updateAdminProduct } from '../../api/adminProducts';
+import { adjustAdminStock, getAdminProduct, updateAdminProduct } from '../../api/adminProducts';
 import { ApiError, NetworkError } from '../../api/http';
 import { createQueryClient } from '../../app/queryClient';
 import { IMAGE_KEY, PRODUCT_ID, makeAdminProduct } from '../../test/adminFixtures';
@@ -15,6 +15,7 @@ vi.mock('../../api/adminProducts', () => ({
   createAdminProduct: vi.fn(),
   updateAdminProduct: vi.fn(),
   getAdminProduct: vi.fn(),
+  adjustAdminStock: vi.fn(),
 }));
 vi.mock('./uploadImage', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./uploadImage')>()),
@@ -22,6 +23,7 @@ vi.mock('./uploadImage', async (importOriginal) => ({
 }));
 const mockGet = vi.mocked(getAdminProduct);
 const mockUpdate = vi.mocked(updateAdminProduct);
+const mockAdjust = vi.mocked(adjustAdminStock);
 const mockUpload = vi.mocked(uploadProductImage);
 const user = userEvent.setup({ applyAccept: false });
 
@@ -62,6 +64,7 @@ const retype = async (label: string, value: string) => {
 beforeEach(() => {
   mockGet.mockReset();
   mockUpdate.mockReset();
+  mockAdjust.mockReset();
   mockUpload.mockReset();
   mockGet.mockResolvedValue(detail());
   URL.createObjectURL = vi.fn(() => 'blob:preview');
@@ -249,6 +252,65 @@ describe('ProductFormPage: edição', () => {
     await retype('Nome', 'Outro');
     await save();
     await waitFor(() => expect(client.getQueryData(['admin', 'me'])).toBeNull());
+  });
+});
+
+describe('ProductFormPage: edição com painel de estoque', () => {
+  it('o estoque deixa de ser somente leitura: painel com histórico, fora do <form> do produto', async () => {
+    mockGet.mockResolvedValue({
+      ...detail(),
+      movements: [
+        {
+          id: 1,
+          productId: PRODUCT_ID,
+          delta: 12,
+          reason: 'initial',
+          orderId: null,
+          adminId: PRODUCT_ID,
+          note: null,
+          stockAfter: 12,
+          createdAt: '2026-10-27T12:00:00.000Z',
+        },
+      ],
+    });
+    renderPage();
+    await ready();
+    expect(screen.getByRole('heading', { level: 2, name: 'Estoque' })).toBeTruthy();
+    expect(screen.getByRole('table', { name: 'Últimas movimentações do estoque' })).toBeTruthy();
+    const adjustForm = screen.getByRole('button', { name: 'Ajustar estoque' }).closest('form');
+    const productForm = screen.getByRole('button', { name: 'Salvar alterações' }).closest('form');
+    expect(adjustForm).not.toBe(productForm);
+    expect(productForm?.contains(adjustForm)).toBe(false);
+    expect(document.querySelectorAll('form form')).toHaveLength(0);
+  });
+
+  it('depois de ajustar, o painel mostra o estoque novo e a movimentação (consulta invalidada)', async () => {
+    const adjusted = {
+      id: 9,
+      productId: PRODUCT_ID,
+      delta: 5,
+      reason: 'restock' as const,
+      orderId: null,
+      adminId: PRODUCT_ID,
+      note: 'caixa',
+      stockAfter: 17,
+      createdAt: '2026-10-27T13:00:00.000Z',
+    };
+    mockAdjust.mockImplementation(async () => {
+      mockGet.mockResolvedValue({ ...detail({ stock: 17 }), movements: [adjusted] });
+      return { product: makeAdminProduct({ stock: 17 }), movement: adjusted };
+    });
+    renderPage();
+    await ready();
+    await user.type(screen.getByLabelText(/^Quantidade/), '5');
+    await user.click(screen.getByRole('button', { name: 'Ajustar estoque' }));
+    await waitFor(() =>
+      expect(document.querySelector('.stock-panel__value')?.textContent).toBe('17'),
+    );
+    expect(screen.getByText('+5')).toBeTruthy();
+    expect(screen.getByText('caixa')).toBeTruthy();
+    // o formulário do produto não foi tocado
+    expect(field('Nome').value).toBe('Teclado Mecânico');
   });
 });
 

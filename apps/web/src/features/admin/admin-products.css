@@ -290,7 +290,7 @@
 .stock-panel {
   display: grid;
   gap: var(--space-4);
-  margin-top: var(--space-8, 3rem);
+  margin-top: var(--space-12);
   padding-top: var(--space-6);
   border-top: var(--border) solid var(--ink);
 }
