@@ -169,3 +169,93 @@ As decisões completas (D1 a D33) estão na seção 13 do [ARCHITECTURE.md](ARCH
 | Status do pedido no web vem sempre da API                                                                                 | Os parâmetros que o Mercado Pago anexa ao retorno da compra são ignorados.                                                                   | [D29](ARCHITECTURE.md)                         |
 | Imagens do MinIO via fork `pgsty/minio`                                                                                   | As imagens oficiais saíram do Docker Hub e do Quay; o código só fala S3, então trocar o provedor local só muda o compose.                    | [D24](ARCHITECTURE.md)                         |
 | `docker compose up --build` provado por um workflow de CI                                                                 | O ambiente do autor não tem Docker; o workflow sobe a stack inteira e confere com `curl`.                                                    | [D33](ARCHITECTURE.md)                         |
+
+## Como rodar
+
+### Tudo com Docker
+
+Precisa só de Docker com o Compose. Na raiz do repositório:
+
+```bash
+docker compose up --build
+```
+
+| Serviço               | Endereço                                                    |
+| --------------------- | ----------------------------------------------------------- |
+| Loja e admin (web)    | http://localhost:8080                                       |
+| API                   | http://localhost:3333 (por exemplo, `GET /health`)          |
+| Console do MinIO (S3) | http://localhost:9001 (usuário e senha padrão `minioadmin`) |
+| PostgreSQL            | `localhost:5432` (usuário, senha e banco `bancada`)         |
+
+Na subida a API roda as migrações e o seed (6 produtos; o seed nunca sobrescreve produtos que já existem). Depois [crie o admin](#criar-o-admin) para entrar em `/admin/login`.
+
+> **O compose é só para desenvolvimento e demonstração (D33).** Senhas e `JWT_SECRET` são valores de dev, o banco e o MinIO ficam expostos nas portas locais e o pagamento é **simulado** (`PAYMENT_PROVIDER=fake`). Não é uma configuração de produção.
+
+Para subir só o banco e o MinIO (com a API e o web rodando fora do Docker, como abaixo):
+
+```bash
+docker compose up -d db minio minio-init
+```
+
+`docker compose down` para parar; `docker compose down -v` também apaga os dados (banco e imagens).
+
+### Desenvolvimento local
+
+Requisitos: Node 22 (há um `.nvmrc`), PostgreSQL 16 e um S3 compatível (MinIO). O jeito mais simples de ter os dois é o comando `docker compose up -d db minio minio-init` acima.
+
+```bash
+npm install
+
+# configuração (veja "Variáveis de ambiente" abaixo)
+cp apps/api/.env.example apps/api/.env      # troque JWT_SECRET por um valor de pelo menos 32 caracteres
+cp apps/web/.env.example apps/web/.env
+
+# o pacote de schemas precisa estar compilado antes de a API e o web rodarem
+npm run build -w @bancada/contracts
+
+npm run migrate -w @bancada/api             # cria o schema
+npm run seed -w @bancada/api                # 6 produtos de exemplo (idempotente)
+
+npm run dev -w @bancada/api                 # API em http://localhost:3333
+npm run dev -w @bancada/web                 # loja e admin em http://localhost:5173
+```
+
+A API não migra sozinha no `dev`: rode `migrate` depois de um banco novo. Na imagem Docker a migração acontece no start.
+
+### Criar o admin
+
+Não existe cadastro de admin pela tela nem rota pública: o único caminho é o script (senha com no mínimo 10 caracteres).
+
+```bash
+# desenvolvimento local
+npm run admin:create -w apps/api -- --email voce@exemplo.com --password '<senha>' --name 'Seu Nome'
+
+# Docker
+docker compose exec api node dist/scripts/create-admin.js --email voce@exemplo.com --password '<senha>' --name 'Seu Nome'
+```
+
+> A senha passada em `--password` fica no histórico do shell (D21). Ler a senha de uma variável de ambiente é um dos [próximos passos](#próximos-passos).
+
+O `apps/api/.env.example` traz `ADMIN_DEV_EMAIL` e `ADMIN_DEV_PASSWORD`: é uma credencial de **teste, só para uso local** (D30). Nenhum código lê essas variáveis; elas apenas documentam qual admin foi criado no banco de desenvolvimento do autor.
+
+### Variáveis de ambiente
+
+Modelos: [`apps/api/.env.example`](apps/api/.env.example) e [`apps/web/.env.example`](apps/web/.env.example). A API valida tudo ao subir (Zod) e falha cedo, listando as variáveis inválidas. As principais:
+
+| Variável                                                                                                                    | Para quê                                                                                                                                                                            |
+| --------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL` (obrigatória)                                                                                                | Conexão com o PostgreSQL.                                                                                                                                                           |
+| `TEST_DATABASE_URL`                                                                                                         | Banco dos testes da API (padrão `postgres://bancada:bancada@localhost:5432/bancada_test`).                                                                                          |
+| `PORT`                                                                                                                      | Porta da API (padrão 3333).                                                                                                                                                         |
+| `WEB_URL`, `API_PUBLIC_URL`                                                                                                 | Origem do web (CORS com cookie e links de retorno do pagamento) e URL pública da API (`notification_url` do webhook). Padrões `http://localhost:5173` e `:3333`.                    |
+| `JWT_SECRET` (obrigatória)                                                                                                  | Assina o JWT do admin; mínimo de 32 caracteres.                                                                                                                                     |
+| `COOKIE_SAMESITE`                                                                                                           | `lax` (padrão) ou `none`. O ideal é web e API no mesmo site, para manter `lax`.                                                                                                     |
+| `PAYMENT_PROVIDER`                                                                                                          | `fake` (padrão) ou `mercadopago`.                                                                                                                                                   |
+| `MP_ACCESS_TOKEN`, `MP_WEBHOOK_SECRET`                                                                                      | Obrigatórias com `mercadopago`.                                                                                                                                                     |
+| `ALLOW_FAKE_PAYMENTS`                                                                                                       | Libera `PAYMENT_PROVIDER=fake` com `NODE_ENV=production` (por padrão a API recusa subir assim).                                                                                     |
+| `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_PUBLIC_URL`, `S3_FORCE_PATH_STYLE` | Armazenamento das imagens. Fora de produção têm o padrão do MinIO local; em produção todas (menos `S3_ENDPOINT`, vazio na AWS) são obrigatórias.                                    |
+| `S3_PUBLIC_ENDPOINT`                                                                                                        | Opcional: endpoint do S3 como o **navegador** o enxerga, usado só no `uploadUrl` do presigned POST (no Docker a API usa `http://minio:9000` e o navegador `http://localhost:9000`). |
+| `BCRYPT_COST`, `TRUST_PROXY`                                                                                                | Custo do bcrypt (padrão 12) e confiança em proxy para o IP do rate limit do login (padrão `false`; atrás de ALB ou App Runner use `1`).                                             |
+| `LOG_LEVEL`                                                                                                                 | Nível do Pino (padrão `info`).                                                                                                                                                      |
+| `SEED_ON_START`                                                                                                             | Só na imagem Docker: `true` roda o seed antes de subir a API (o compose liga).                                                                                                      |
+| `VITE_API_URL` (web)                                                                                                        | URL da API que o navegador usa. No build de produção é obrigatória e **vira parte do bundle**: outra URL exige refazer a imagem.                                                    |
