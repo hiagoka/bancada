@@ -2,10 +2,15 @@ import { useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useState } from 'react';
 import { ApiError } from '../../api/http';
 import { getOrder } from '../../api/orders';
+import { serverNow } from '../../lib/serverClock';
 
 export const POLL_INTERVAL_MS = 3000;
 // Depois de 5 minutos de polling a tela para e oferece "Atualizar" (o pedido ainda PENDING).
 export const POLL_LIMIT_MS = 5 * 60 * 1000;
+
+// Pedido com Pix (D34): o polling segue enquanto PENDING até pix.expiresAt + 30 s (um webhook atrasado
+// ainda precisa ser visto), em vez de parar aos 5 minutos. A validade é do relógio do servidor.
+export const PIX_POLL_GRACE_MS = 30 * 1000;
 
 export const orderQueryKey = (id: string) => ['order', id] as const;
 
@@ -35,8 +40,16 @@ export function useOrder(id: string) {
     staleTime: 0, // ao abrir a página, revalida mesmo que o checkout tenha acabado de gravar o pedido
     retry: shouldRetry,
     refetchIntervalInBackground: false,
-    refetchInterval: (q) =>
-      !stopped && q.state.data?.status === 'PENDING' ? POLL_INTERVAL_MS : false,
+    refetchInterval: (q) => {
+      const data = q.state.data;
+      if (data?.status !== 'PENDING') return false;
+      // Com Pix o prazo é a validade da cobrança (+ tolerância), não os 5 minutos.
+      if (data.pix) {
+        const deadline = Date.parse(data.pix.expiresAt) + PIX_POLL_GRACE_MS;
+        return serverNow() <= deadline ? POLL_INTERVAL_MS : false;
+      }
+      return stopped ? false : POLL_INTERVAL_MS;
+    },
   });
 
   const { refetch } = query;
@@ -47,8 +60,8 @@ export function useOrder(id: string) {
 
   return {
     ...query,
-    // true só se parou POR LIMITE e o pedido continua PENDING.
-    pollingStopped: stopped && query.data?.status === 'PENDING',
+    // true só se parou POR LIMITE de 5 min e o pedido continua PENDING (com Pix o prazo é outro).
+    pollingStopped: stopped && query.data?.status === 'PENDING' && !query.data.pix,
     restartPolling,
   };
 }

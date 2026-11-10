@@ -6,7 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getOrder } from '../../api/orders';
 import { ApiError, NetworkError } from '../../api/http';
 import { makeOrder, ORDER_ID } from '../../test/orderFixtures';
-import { POLL_INTERVAL_MS, POLL_LIMIT_MS, useOrder } from './useOrder';
+import { recordServerDate, resetServerClock } from '../../lib/serverClock';
+import { PIX_POLL_GRACE_MS, POLL_INTERVAL_MS, POLL_LIMIT_MS, useOrder } from './useOrder';
 
 vi.mock('../../api/orders', () => ({ getOrder: vi.fn() }));
 const mockGetOrder = vi.mocked(getOrder);
@@ -24,6 +25,7 @@ beforeEach(() => {
 afterEach(() => {
   client.clear();
   vi.useRealTimers();
+  resetServerClock();
 });
 
 const advance = (ms: number) => act(async () => void (await vi.advanceTimersByTimeAsync(ms)));
@@ -163,4 +165,105 @@ describe('useOrder: erros', () => {
     await advance(10_000);
     expect(result.current.data?.status).toBe('PAID');
   });
+});
+
+describe('useOrder: polling de pedidos com Pix (D34)', () => {
+  const pixExpiringIn = (seconds: number) => ({
+    brCode: '00020101021226950014br.gov.bcb.pix0136teste',
+    qrCodeImage: 'data:image/png;base64,iVBORw0KGgo=',
+    expiresAt: new Date(Date.now() + seconds * 1000).toISOString(),
+  });
+
+  it('a tolerância depois da validade é de 30 s', () => {
+    expect(PIX_POLL_GRACE_MS).toBe(30_000);
+  });
+
+  it('com Pix o polling NÃO para aos 5 minutos: segue enquanto PENDING até a validade', async () => {
+    mockGetOrder.mockResolvedValue(makeOrder({ pix: pixExpiringIn(30 * 60) }));
+    const { result } = mount();
+    await advance(0);
+    await advance(POLL_LIMIT_MS + 60_000); // 6 min
+    const calls = mockGetOrder.mock.calls.length;
+    expect(calls).toBeGreaterThan(POLL_LIMIT_MS / POLL_INTERVAL_MS); // passou do que 5 min dariam
+    await advance(POLL_INTERVAL_MS * 3);
+    expect(mockGetOrder.mock.calls.length).toBe(calls + 3); // ainda a cada 3 s
+    expect(result.current.pollingStopped).toBe(false); // não é parada "por limite"
+  });
+
+  it('sem Pix (modo fake) o limite de 5 minutos continua valendo', async () => {
+    mockGetOrder.mockResolvedValue(makeOrder({ pix: null }));
+    const { result } = mount();
+    await advance(0);
+    await advance(POLL_LIMIT_MS + 1000);
+    const calls = mockGetOrder.mock.calls.length;
+    await advance(30_000);
+    expect(mockGetOrder).toHaveBeenCalledTimes(calls);
+    expect(result.current.pollingStopped).toBe(true);
+  });
+
+  it('para de vez em pix.expiresAt + 30 s (e nunca antes)', async () => {
+    mockGetOrder.mockResolvedValue(makeOrder({ pix: pixExpiringIn(60) }));
+    mount();
+    await advance(0);
+    await advance(60_000 + 20_000); // 20 s depois da validade: ainda dentro da tolerância
+    const during = mockGetOrder.mock.calls.length;
+    await advance(POLL_INTERVAL_MS);
+    expect(mockGetOrder.mock.calls.length).toBeGreaterThan(during);
+    await advance(40_000); // passou de validade + 30 s
+    const after = mockGetOrder.mock.calls.length;
+    await advance(60_000);
+    expect(mockGetOrder).toHaveBeenCalledTimes(after);
+  });
+
+  it('um pagamento que chega no fim da tolerância (webhook atrasado) ainda é visto', async () => {
+    mockGetOrder
+      .mockResolvedValueOnce(makeOrder({ pix: pixExpiringIn(5) }))
+      .mockResolvedValue(makeOrder({ pix: pixExpiringIn(5) }));
+    const { result } = mount();
+    await advance(0);
+    await advance(20_000); // validade (5 s) já passou, tolerância de 30 s não
+    mockGetOrder.mockResolvedValue(makeOrder({ status: 'PAID', paidAt: new Date().toISOString() }));
+    await advance(POLL_INTERVAL_MS + 100);
+    expect(result.current.data?.status).toBe('PAID');
+  });
+
+  it('Pix já vencido há mais de 30 s ao abrir a página: consulta uma vez e não faz polling', async () => {
+    mockGetOrder.mockResolvedValue(makeOrder({ pix: pixExpiringIn(-120) }));
+    mount();
+    await advance(0);
+    expect(mockGetOrder).toHaveBeenCalledTimes(1);
+    await advance(30_000);
+    expect(mockGetOrder).toHaveBeenCalledTimes(1);
+  });
+
+  it('o prazo usa o relógio do SERVIDOR (aparelho 10 min atrasado não prolonga o polling)', async () => {
+    // o aparelho acha que são 10 min antes do servidor: pelo relógio local o Pix ainda valeria ~10 min
+    const serverNow = Date.now() + 10 * 60_000;
+    recordServerDate(new Date(serverNow).toUTCString());
+    mockGetOrder.mockResolvedValue(
+      makeOrder({
+        pix: { ...pixExpiringIn(0), expiresAt: new Date(serverNow - 60_000).toISOString() },
+      }),
+    );
+    mount();
+    await advance(0);
+    await advance(30_000);
+    expect(mockGetOrder).toHaveBeenCalledTimes(1); // pelo servidor o Pix venceu há 1 min: sem polling
+  });
+
+  it.each(['PAID', 'CANCELLED', 'REFUNDED'] as const)(
+    'com Pix, %s também para o polling',
+    async (final) => {
+      mockGetOrder
+        .mockResolvedValueOnce(makeOrder({ pix: pixExpiringIn(1800) }))
+        .mockResolvedValue(makeOrder({ status: final }));
+      mount();
+      await advance(0);
+      await advance(3000);
+      await advance(50);
+      const calls = mockGetOrder.mock.calls.length;
+      await advance(60_000);
+      expect(mockGetOrder).toHaveBeenCalledTimes(calls);
+    },
+  );
 });
