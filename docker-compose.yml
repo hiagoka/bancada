@@ -1,9 +1,25 @@
+# Stack completa da Bancada (ARCHITECTURE.md, seção 10):
+#
+#   docker compose up --build          loja + admin + API + banco + MinIO
+#     loja/admin  http://localhost:8080      API  http://localhost:3333
+#     MinIO       http://localhost:9000      console http://localhost:9001   banco  localhost:5432
+#
+#   docker compose up db minio minio-init   só o banco e o MinIO (fluxo de desenvolvimento local, com
+#                                           a API e o web rodando fora do Docker; é o que o CI usa)
+#
+# Primeiro admin (não existe cadastro pela tela):
+#   docker compose exec api node dist/scripts/create-admin.js --email admin@bancada.test --password '<senha>' --name Admin
+#
+# TUDO aqui é de DESENVOLVIMENTO: senhas padrão (sobrescreva com variáveis de ambiente ou um .env na
+# raiz), pagamento SIMULADO (PAYMENT_PROVIDER=fake) e nenhum segredo real. Para o Mercado Pago ou
+# produção, ver o README.
+
 services:
   db:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: bancada
-      POSTGRES_PASSWORD: bancada
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bancada}
       POSTGRES_DB: bancada
     ports:
       - '5432:5432'
@@ -21,20 +37,28 @@ services:
     image: pgsty/minio
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      # O NAVEGADOR envia a imagem do produto direto para o MinIO (presigned POST) a partir da origem
+      # do web: ela precisa estar na lista de CORS. (O padrão do MinIO já é "*"; fica explícito para
+      # não depender dele.) Origens: web no Docker (8080) e Vite em desenvolvimento (5173).
+      # Na AWS S3 o equivalente é a configuração CORS do bucket (D23e).
+      MINIO_API_CORS_ALLOW_ORIGIN: 'http://localhost:8080,http://localhost:5173,http://bancada.localhost:5173'
     ports:
       - '9000:9000'
       - '9001:9001'
     volumes:
       - minio-data:/data
 
+  # Cria o bucket e libera leitura pública dos objetos (as imagens aparecem na loja), depois encerra.
+  # A API só sobe depois que ele termina com sucesso. A senha vai na URL do alias: use valores
+  # sem caracteres especiais (ou codificados) em MINIO_ROOT_PASSWORD.
   minio-init:
     image: pgsty/mc
     depends_on:
       - minio
     environment:
-      MC_HOST_local: http://minioadmin:minioadmin@minio:9000
+      MC_HOST_local: http://${MINIO_ROOT_USER:-minioadmin}:${MINIO_ROOT_PASSWORD:-minioadmin}@minio:9000
     entrypoint: >
       /bin/sh -c "
       until mc ls local >/dev/null 2>&1; do sleep 1; done &&
@@ -42,6 +66,76 @@ services:
       mc anonymous set download local/bancada
       "
     restart: 'no'
+
+  # Ao iniciar, a API roda as migrações e (SEED_ON_START) o seed, que nunca sobrescreve produtos
+  # existentes (D17). O contexto do build é a raiz do repositório (npm workspaces).
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      # development: cookie do admin sem Secure (o navegador trata http://localhost como seguro, mas
+      # Safari não) e o MinIO local liberado. NODE_ENV=production exige as S3_* e o ALLOW_FAKE_PAYMENTS.
+      NODE_ENV: development
+      PORT: '3333'
+      DATABASE_URL: postgres://bancada:${POSTGRES_PASSWORD:-bancada}@db:5432/bancada
+      # Só desenvolvimento. Tem de ter no mínimo 32 caracteres.
+      JWT_SECRET: ${JWT_SECRET:-dev-only-jwt-secret-change-me-0123456789abcdef}
+      # Origens como o NAVEGADOR as vê (CORS com cookie e links de pagamento): coerentes com as
+      # portas publicadas abaixo.
+      WEB_URL: http://localhost:8080
+      API_PUBLIC_URL: http://localhost:3333
+      COOKIE_SAMESITE: lax
+      PAYMENT_PROVIDER: fake
+      # S3: a API fala com o MinIO pela rede do compose (minio:9000), mas o navegador não enxerga esse
+      # nome. S3_PUBLIC_ENDPOINT é o host do uploadUrl entregue ao navegador e S3_PUBLIC_URL é a base
+      # das imagens exibidas: ambos usam localhost:9000.
+      S3_ENDPOINT: http://minio:9000
+      S3_PUBLIC_ENDPOINT: http://localhost:9000
+      S3_REGION: us-east-1
+      S3_BUCKET: bancada
+      S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
+      S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      S3_PUBLIC_URL: http://localhost:9000/bancada
+      S3_FORCE_PATH_STYLE: 'true'
+      SEED_ON_START: 'true'
+    ports:
+      - '3333:3333'
+    depends_on:
+      db:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3333/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 15s
+
+  # Loja e admin (build do Vite servido por nginx). VITE_API_URL é gravada NO BUNDLE no build e é a
+  # URL da API que o navegador usa: precisa casar com a porta publicada da api (3333).
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:3333}
+    ports:
+      - '8080:8080'
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      # 127.0.0.1 (e não localhost): no alpine, localhost pode resolver para ::1.
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:8080/']
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
 volumes:
   db-data:
