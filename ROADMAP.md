@@ -36,7 +36,7 @@ Uma tarefa por vez (api e web podem andar em paralelo quando não dependem uma d
 ## Fase 6 · Entrega
 - [x] **T20** [api] Docker completo: Dockerfiles da API e do web, compose com db, minio, minio-init, api e web. Aceite: docker compose up --build deixa loja e admin funcionando.
 - [x] **T21** [org] README com prints, diagrama Mermaid dos fluxos de pagamento e estoque, decisões, como criar o admin, modo fake e modo Mercado Pago (com ngrok), tabela de endpoints, e seção "Próximos passos" (expiração automática de pedidos por job, limpeza de imagens órfãs no S3).
-- [ ] **T22a** [api] AbacatePayGateway, migração 002, webhook /webhooks/abacatepay e remoção do Mercado Pago (D34, 8.9). Aceite: testes do gateway e do webhook com servidor HTTP falso (assinatura, segredo, deduplicação, reconsulta, expiração, estorno sem restock) e CI verde.
+- [x] **T22a** [api] AbacatePayGateway, migração 002, webhook /webhooks/abacatepay e remoção do Mercado Pago (D34, 8.9). Aceite: testes do gateway e do webhook com servidor HTTP falso (assinatura, segredo, deduplicação, reconsulta, expiração, estorno sem restock) e CI verde.
 - [ ] **T22b** [web] Pagamento por Pix na página do pedido: QR Code, copia e cola, contagem regressiva, expiração e fluxo do fake preservado. Aceite: pedido novo mostra o Pix; ao pagar vira Pago pelo polling.
 - [ ] **T22c** [org + api] Teste real no modo teste da AbacatePay (chave abc_dev_, túnel, webhook cadastrado, simulate-payment), com README atualizado (modo AbacatePay no lugar do Mercado Pago).
 - [ ] **T23** [org] Deploy: API na AWS (App Runner ou ECS + RDS + S3) e web na Vercel. Links no README.
