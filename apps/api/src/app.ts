@@ -118,7 +118,9 @@ export function createApp({
   });
   app.use(['/auth', '/admin'], requireCsrfHeader);
   // Webhook da AbacatePay: o corpo fica CRU (Buffer), porque a assinatura é sobre os bytes recebidos.
-  // Montado ANTES do parser de JSON, que então não toca nesta rota.
+  // Montado ANTES do parser de JSON, que então não toca nesta rota. Corpo acima de 1 MB: o parser
+  // recusa (400 VALIDATION_ERROR pelo errorHandler) antes da conferência da assinatura; os eventos
+  // reais têm poucos KB.
   app.use('/webhooks/abacatepay', express.raw({ type: () => true, limit: '1mb' }));
   app.use(express.json());
   app.use(cookieParser());

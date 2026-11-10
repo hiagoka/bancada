@@ -222,6 +222,34 @@ describe('assinatura e segredo', () => {
     expect(noType.status).toBe(200); // a rota lê o corpo cru, qualquer que seja o Content-Type
   });
 
+  it('corpo maior que 1 MB: 400 VALIDATION_ERROR (limite do express.raw, ANTES de conferir a assinatura), sem efeito', async () => {
+    const order = await createOrder();
+    fake.checkStatuses.set(order.pixId, 'PAID');
+    const huge = JSON.stringify({
+      event: 'transparent.completed',
+      data: { transparent: { id: order.pixId } },
+      enchimento: 'x'.repeat(1024 * 1024 + 1),
+    });
+    expect(Buffer.byteLength(huge)).toBeGreaterThan(1024 * 1024);
+    const res = await send(huge); // assinatura e secret CORRETOS: o limite vale mesmo assim
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_ERROR');
+    expect(checkCalls()).toHaveLength(0);
+    expect((await orderRow(order.orderId)).status).toBe('PENDING');
+    expect(await events()).toHaveLength(0);
+  });
+
+  it('corpo de até 1 MB ainda é aceito (o limite não atrapalha eventos reais, que têm poucos KB)', async () => {
+    const order = await createOrder();
+    fake.checkStatuses.set(order.pixId, 'PAID');
+    const body = JSON.stringify({
+      event: 'transparent.completed',
+      data: { transparent: { id: order.pixId } },
+      enchimento: 'x'.repeat(900 * 1024),
+    });
+    expect((await send(body)).status).toBe(200);
+  });
+
   it('JSON malformado COM assinatura válida: 400 INVALID_JSON', async () => {
     const raw = '{"event": "transparent.completed", ';
     const res = await send(raw);
