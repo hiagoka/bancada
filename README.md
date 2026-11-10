@@ -40,7 +40,7 @@ _Acompanhamento do pedido, que consulta a API a cada 3 s enquanto está pendente
 
 ![Tela de login do admin com os campos de e-mail e senha](docs/screenshots/05-admin-login.jpg)
 
-_Login do admin (cookie `httpOnly`; e-mail inexistente e senha errada dão a mesma mensagem)._
+_Login do admin (sessão em cookie `httpOnly`)._
 
 ![Lista de produtos do admin com imagem, preço, estoque e situação](docs/screenshots/06-admin-produtos.jpg)
 
@@ -155,7 +155,7 @@ As decisões completas (D1 a D33) estão na seção 13 do [ARCHITECTURE.md](ARCH
 | Estoque como livro-razão (`stock_movements`)                                                                              | Toda mudança é auditável e o estoque pode ser conferido pela soma dos movimentos.                                                            | [D11](ARCHITECTURE.md)                         |
 | Webhook reconsulta o pagamento no provedor                                                                                | O corpo da notificação pode ser forjado ou estar desatualizado.                                                                              | [D4](ARCHITECTURE.md)                          |
 | Lock do pedido antes de inserir o `payment_event`                                                                         | Na ordem inversa o `INSERT` segura `FOR KEY SHARE` no pedido (FK) e duas notificações simultâneas entram em deadlock. Há teste de regressão. | [D20](ARCHITECTURE.md)                         |
-| Deduplicação por `UNIQUE (provider, payment_id, status)`                                                                  | Cada combinação é processada uma única vez, então replays são inofensivos e a assinatura dispensa janela de tempo.                           | [D6](ARCHITECTURE.md)                          |
+| Deduplicação por `UNIQUE (provider, payment_id, status)`                                                                  | Cada combinação é processada uma única vez, então replays são inofensivos e a assinatura dispensa janela de tempo.                           | Seção 6 e fluxo 8.2                            |
 | Estorno não devolve estoque                                                                                               | É devolução de dinheiro, não de mercadoria. Se o item voltar, o admin ajusta com `restock` e uma observação.                                 | [D13](ARCHITECTURE.md)                         |
 | Preference expira em `created_at` + 30 min; admin cancela pedido abandonado                                               | A expiração coincide com a janela do cancelamento manual, então um pedido nunca pode ser pago depois de cancelável.                          | [D14](ARCHITECTURE.md), [D19](ARCHITECTURE.md) |
 | Gateway de pagamento atrás de interface, com implementação fake                                                           | Roda e testa sem credenciais.                                                                                                                | [D3](ARCHITECTURE.md)                          |
@@ -285,7 +285,7 @@ O gateway fica atrás de uma interface (`PaymentGateway`), e a variável `PAYMEN
 
 ### Modo Mercado Pago (planejado, ainda não verificado)
 
-> **Honestidade:** o código do gateway do Mercado Pago (Preference, consulta do pagamento e validação da assinatura do webhook com o SDK oficial) existe e é coberto por testes com o SDK simulado, mas o **teste ponta a ponta com o Mercado Pago de verdade é a tarefa T22 e ainda não foi feito**. O que segue são instruções do que se pretende fazer, não um resultado verificado. Os nomes de menus do painel do Mercado Pago podem diferir.
+> **Aviso:** o código do gateway do Mercado Pago (Preference, consulta do pagamento e validação da assinatura do webhook com o SDK oficial) existe e é coberto por testes com o SDK simulado, mas o **teste ponta a ponta com o Mercado Pago de verdade é a tarefa T22 e ainda não foi feito**. O que segue são instruções do que se pretende fazer, não um resultado verificado. Os nomes de menus do painel do Mercado Pago podem diferir.
 
 Use **somente credenciais de teste**, nunca as de produção, e não versione nenhum valor real.
 
@@ -331,7 +331,7 @@ Envelope: sucesso `{ "data": ... }`; erro `{ "error": { "code", "message", "deta
 | `GET`   | `/admin/orders`                | admin                  | Pedidos paginados (`?status=&page=`, 20 por página, mais recentes primeiro). É o único lugar com dados do cliente, e traz `cancellable` calculado no servidor.                                                     |
 | `POST`  | `/admin/orders/:id/cancel`     | admin                  | Cancela um pedido `PENDING` criado há mais de 30 minutos e devolve o estoque. `404`, `409 ORDER_NOT_CANCELLABLE`.                                                                                                  |
 
-As rotas de `/admin` exigem o cookie do admin (`401 UNAUTHORIZED` sem ele). A lista acima foi conferida com os routers em `apps/api/src/modules`.
+As rotas de `/admin` exigem o cookie do admin (`401 UNAUTHORIZED` sem ele).
 
 ## Testes e CI
 
@@ -362,7 +362,7 @@ O que eles cobrem (entre outras coisas): total com o preço do banco, replay e c
 
 ## Próximos passos
 
-Limitações conhecidas de hoje e o que viria depois. Tudo abaixo é verdade no código atual e está registrado no [ARCHITECTURE.md](ARCHITECTURE.md).
+Limitações conhecidas de hoje e o que viria depois.
 
 **Pedidos e pagamento**
 
