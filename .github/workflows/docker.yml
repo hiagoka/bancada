@@ -56,9 +56,50 @@ jobs:
           count=$(jq '.data | length' products.json)
           echo "produtos: $count"
           test "$count" = "6"
-          # o seed é idempotente (D17): reiniciar a API não duplica nem sobrescreve nada
+
+      - name: Smoke - admin (criar admin pelo script, login, cookie httpOnly e CORS)
+        run: |
+          docker compose exec -T api node dist/scripts/create-admin.js \
+            --email "$ADMIN_EMAIL" --password "$ADMIN_PASSWORD" --name "Admin CI"
+          body=$(jq -nc --arg e "$ADMIN_EMAIL" --arg p "$ADMIN_PASSWORD" '{email:$e,password:$p}')
+          curl -sS -D headers.txt -o login.json -c jar.txt -X POST "$API/auth/login" \
+            -H 'Content-Type: application/json' -H 'X-Requested-With: bancada-web' \
+            -H "Origin: $WEB" -d "$body"
+          head -n1 headers.txt | grep -q ' 200'
+          login_headers=$(tr -d '\r' < headers.txt)
+          cookie=$(grep -i '^set-cookie: bancada_admin=' <<<"$login_headers")
+          echo "$cookie" | sed -E 's/(bancada_admin=)[^;]+/\1<oculto>/I'
+          echo "$cookie" | grep -qi 'httponly'
+          echo "$cookie" | grep -qi 'samesite=lax'
+          echo "$cookie" | grep -qi 'path=/'
+          grep -qi "^access-control-allow-origin: $WEB" <<<"$login_headers"
+          # a sessão vale: /auth/me com o cookie
+          test "$(curl -s -o /dev/null -w '%{http_code}' -b jar.txt "$API/auth/me")" = "200"
+          # sem o header CSRF a mutação é recusada (D15)
+          test "$(curl -s -o /dev/null -w '%{http_code}' -b jar.txt -X POST "$API/auth/logout" \
+            -H 'Content-Type: application/json' -d '{}')" = "403"
+
+      # D17: o seed nunca sobrescreve produtos existentes. Prova de verdade: o admin muda um preço, a
+      # API reinicia (migra e semeia de novo no start) e o preço alterado tem de continuar.
+      - name: Smoke - seed idempotente (preço editado sobrevive ao restart da API)
+        run: |
+          id=$(jq -r '.data[0].id' products.json)
+          before=$(jq -r '.data[0].priceCents' products.json)
+          new=$((before + 1234))
+          curl -fsS -b jar.txt -X PATCH "$API/admin/products/$id" \
+            -H 'Content-Type: application/json' -H 'X-Requested-With: bancada-web' \
+            -d "{\"priceCents\":$new}" -o patched.json
+          test "$(jq -r '.data.priceCents' patched.json)" = "$new"
           docker compose restart api
-          for i in $(seq 1 60); do curl -fsS -o /dev/null "$API/health" && break; sleep 2; done
+          healthy=false
+          for i in $(seq 1 60); do
+            if curl -fsS -o /dev/null "$API/health"; then healthy=true; break; fi
+            sleep 2
+          done
+          test "$healthy" = "true"
+          after=$(curl -fsS "$API/products" | jq -r --arg id "$id" '.data[] | select(.id == $id) | .priceCents')
+          echo "preço antes=$before, editado=$new, depois do restart=$after"
+          test "$after" = "$new"
           test "$(curl -fsS "$API/products" | jq '.data | length')" = "6"
 
       - name: Smoke - web (HTML, fallback de SPA e cache)
@@ -83,28 +124,6 @@ jobs:
           # a URL da API gravada no bundle é a publicada pelo compose
           curl -fsS "$WEB$asset" -o bundle.js
           grep -q 'localhost:3333' bundle.js
-
-      - name: Smoke - admin (criar admin pelo script, login, cookie httpOnly e CORS)
-        run: |
-          docker compose exec -T api node dist/scripts/create-admin.js \
-            --email "$ADMIN_EMAIL" --password "$ADMIN_PASSWORD" --name "Admin CI"
-          body=$(jq -nc --arg e "$ADMIN_EMAIL" --arg p "$ADMIN_PASSWORD" '{email:$e,password:$p}')
-          curl -sS -D headers.txt -o login.json -c jar.txt -X POST "$API/auth/login" \
-            -H 'Content-Type: application/json' -H 'X-Requested-With: bancada-web' \
-            -H "Origin: $WEB" -d "$body"
-          head -n1 headers.txt | grep -q ' 200'
-          login_headers=$(tr -d '\r' < headers.txt)
-          cookie=$(grep -i '^set-cookie: bancada_admin=' <<<"$login_headers")
-          echo "$cookie" | sed -E 's/(bancada_admin=)[^;]+/\1<oculto>/I'
-          echo "$cookie" | grep -qi 'httponly'
-          echo "$cookie" | grep -qi 'samesite=lax'
-          echo "$cookie" | grep -qi 'path=/'
-          grep -qi "^access-control-allow-origin: $WEB" <<<"$login_headers"
-          # a sessão vale: /auth/me com o cookie
-          test "$(curl -s -o /dev/null -w '%{http_code}' -b jar.txt "$API/auth/me")" = "200"
-          # sem o header CSRF a mutação é recusada (D15)
-          test "$(curl -s -o /dev/null -w '%{http_code}' -b jar.txt -X POST "$API/auth/logout" \
-            -H 'Content-Type: application/json' -d '{}')" = "403"
 
       - name: Smoke - upload de imagem direto ao MinIO (o que o navegador faz)
         run: |
