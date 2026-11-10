@@ -1,5 +1,6 @@
 import { apiErrorSchema, type ErrorCode } from '@bancada/contracts';
 import type { ZodType } from 'zod';
+import { recordServerDate } from '../lib/serverClock';
 
 // Erro devolvido pela API no envelope { error: { code, message, details? } }.
 export class ApiError extends Error {
@@ -90,6 +91,7 @@ export function createHttpClient({
     } catch (err) {
       throw toRequestError(err);
     }
+    recordServerDate(response.headers.get('Date')); // relógio do servidor (contagem do Pix)
     if (response.ok && text === '') return undefined as T; // 204
 
     let payload: unknown;

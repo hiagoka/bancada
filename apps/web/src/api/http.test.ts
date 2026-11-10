@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { resetServerClock, serverNow } from '../lib/serverClock';
 import { ApiError, NetworkError, createHttpClient, resolveApiUrl } from './http';
 
 function json(body: unknown, status = 200): Response {
@@ -118,6 +119,46 @@ describe('request: respostas de sucesso', () => {
       code: 'INTERNAL_ERROR',
       status: 200,
     });
+  });
+});
+
+describe('relógio do servidor (header Date)', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    resetServerClock();
+  });
+
+  const withDate = (date: string, status = 200) =>
+    new Response(
+      JSON.stringify(
+        status === 200 ? { data: {} } : { error: { code: 'NOT_FOUND', message: 'x' } },
+      ),
+      {
+        status,
+        headers: { 'Content-Type': 'application/json', Date: date },
+      },
+    );
+
+  it('a resposta com Date acerta serverNow() (relógio local 10 min atrasado)', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-10T12:00:00.000Z'));
+    const { client } = setup(withDate('Tue, 10 Nov 2026 12:10:00 GMT'));
+    await client.request('/x');
+    expect(serverNow()).toBe(Date.parse('2026-11-10T12:10:00.500Z'));
+  });
+
+  it('respostas de ERRO também reajustam o relógio', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-10T12:00:00.000Z'));
+    const { client } = setup(withDate('Tue, 10 Nov 2026 12:05:00 GMT', 404));
+    await client.request('/x').catch(() => undefined);
+    expect(serverNow()).toBe(Date.parse('2026-11-10T12:05:00.500Z'));
+  });
+
+  it('sem header Date legível o relógio local continua valendo', async () => {
+    const { client } = setup(json({ data: {} }));
+    await client.request('/x');
+    expect(Math.abs(serverNow() - Date.now())).toBeLessThan(50);
   });
 });
 
