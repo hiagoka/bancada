@@ -2,18 +2,22 @@ name: Docker
 
 # Prova o `docker compose up --build`: sobe a stack inteira (db, minio, minio-init, api, web) e
 # confere com curl que a loja, o admin e o upload de imagem funcionam. Roda no push para a main, em
-# pull requests que mexem na infra e sob demanda (Actions > Docker > Run workflow, em qualquer branch).
+# pull requests que mexem na infra ou no código das imagens (api, web, packages) e sob demanda (Actions > Docker > Run workflow, em qualquer branch).
 on:
   push:
     branches: [main]
   pull_request:
     paths:
+      # Infra
       - 'docker-compose.yml'
       - '.dockerignore'
       - '.github/workflows/docker.yml'
-      - 'apps/**/Dockerfile'
-      - 'apps/web/nginx*.conf'
-      - 'apps/api/docker-entrypoint.sh'
+      # Qualquer código que entra nas imagens
+      - 'apps/api/**'
+      - 'apps/web/**'
+      - 'packages/**'
+      - 'tsconfig.base.json'
+      - 'package.json'
       - 'package-lock.json'
   workflow_dispatch:
 
