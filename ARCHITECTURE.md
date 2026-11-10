@@ -7,7 +7,7 @@ PRIMEIRA AÇÃO: salve este prompt inteiro em ARCHITECTURE.md na raiz do reposit
 ========================================
 1. ESCOPO
 ========================================
-Loja (cliente, sem login): catálogo, carrinho, checkout com Mercado Pago (Checkout Pro), página de acompanhamento do pedido, modo de pagamento simulado.
+Loja (cliente, sem login): catálogo, carrinho, checkout com Pix pela AbacatePay (D34), página de acompanhamento do pedido, modo de pagamento simulado.
 Administração (com login): cadastro e edição de produtos com upload de imagem, ativar/desativar produto, ajuste de estoque com histórico, lista de pedidos.
 Infra: testes, Docker e CI.
 Fora do escopo (não implementar sem pedido explícito): login de cliente, cupons, frete, e-mails, expiração automática de pedidos por job (o cancelamento MANUAL pelo admin existe, ver 8.8), apagar imagens antigas do S3, busca na loja, múltiplos níveis de permissão de admin.
@@ -30,7 +30,7 @@ Regra de dependência: api e web podem importar contracts. contracts não import
 - Node 22, TypeScript 5.9 strict (não usar TS 7, incompatível com ts-jest)
 - API: Express 5, Zod 4, Pino (logs), pg (SQL puro, SEM ORM)
 - Banco: PostgreSQL 16, migrações .sql versionadas com runner próprio
-- Pagamento: SDK oficial "mercadopago" (Preference, Payment, WebhookSignatureValidator)
+- Pagamento: API REST da AbacatePay v2 (Pix transparente) via fetch, sem SDK (D34)
 - Autenticação: bcryptjs (não bcrypt nem argon2, para funcionar no Windows sem compilação nativa), jsonwebtoken, cookie-parser, express-rate-limit
 - Imagens: S3 (@aws-sdk/client-s3 + @aws-sdk/s3-presigned-post); MinIO localmente
 - Testes da API: Jest 30 + ts-jest + Supertest, contra um Postgres real
@@ -69,7 +69,7 @@ Pastas:
   src/modules/products/       products.routes.ts (público), products.repository.ts
   src/modules/stock/          stock.repository.ts (applyStockMovement, listMovements)
   src/modules/orders/         orders.routes.ts, orders.service.ts, orders.repository.ts, order-status.ts
-  src/modules/payments/       payment-gateway.ts, mercadopago.gateway.ts, fake.gateway.ts, payment-webhook.service.ts, payments.routes.ts
+  src/modules/payments/       payment-gateway.ts, abacatepay.gateway.ts, fake.gateway.ts, payment-webhook.service.ts, payments.routes.ts
   src/modules/auth/           auth.routes.ts, auth.service.ts, admins.repository.ts, require-admin.ts
   src/modules/admin/          admin-products.routes.ts, admin-products.service.ts, admin-orders.routes.ts, uploads.routes.ts
   src/modules/storage/        storage.service.ts (interface), s3.storage.ts, fake.storage.ts
@@ -84,13 +84,13 @@ Camadas: routes -> service -> repository -> PostgreSQL; services também usam as
 - repository: SQL parametrizado ($1), mapeamento snake_case <-> camelCase. Sem regra de negócio. Recebe Db = Pool | PoolClient.
 - Injeção de dependências: createApp({ pool, gateway, storage, logger, webUrl, webhookSecret, jwtSecret, cookieSameSite }). Sem singletons globais. Testes usam FakePaymentGateway e FakeStorageService.
 - Erros: lançar AppError(status, code, message, details?). O errorHandler converte ZodError, AppError e erros inesperados (500 + log).
-- Dinheiro SEMPRE em centavos (INTEGER). Converter para reais só ao montar a preferência do Mercado Pago e ao exibir no web.
+- Dinheiro SEMPRE em centavos (INTEGER). A AbacatePay também recebe centavos. Converter para reais só ao exibir no web.
 - O script de build copia os .sql para dist usando Node (fs.cpSync), não comandos Unix (o projeto precisa rodar no Windows).
 
 Variáveis de ambiente:
   DATABASE_URL (obrigatória), TEST_DATABASE_URL (padrão .../bancada_test), PORT (3333)
   WEB_URL (http://localhost:5173), API_PUBLIC_URL (http://localhost:3333)
-  PAYMENT_PROVIDER ("fake" | "mercadopago", padrão fake), MP_ACCESS_TOKEN e MP_WEBHOOK_SECRET (obrigatórias com mercadopago)
+  PAYMENT_PROVIDER ("fake" | "abacatepay", padrão fake), ABACATEPAY_API_KEY e ABACATEPAY_WEBHOOK_SECRET (obrigatórias com abacatepay; o segredo tem 32+ caracteres) e ABACATEPAY_API_URL (padrão https://api.abacatepay.com/v2)
   JWT_SECRET (obrigatória, mínimo 32 caracteres), COOKIE_SAMESITE (lax | none, padrão lax)
   S3_ENDPOINT (vazio na AWS; http://localhost:9000 no MinIO), S3_REGION, S3_BUCKET, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, S3_PUBLIC_URL, S3_FORCE_PATH_STYLE (true no MinIO)
 
@@ -132,7 +132,7 @@ Públicos:
   GET  /products/:id            200 | 404 (inclusive inativo ou id que não é UUID)
   POST /orders                  cabeçalho Idempotency-Key obrigatório. 201 criado | 200 replay | 400 | 409 OUT_OF_STOCK | 409 IDEMPOTENCY_KEY_REUSED | 422 PRODUCT_UNAVAILABLE | 502 CHECKOUT_UNAVAILABLE
   GET  /orders/:id              200 | 404. Resposta = publicOrderSchema: id, status, items, totalCents, checkoutUrl (só enquanto PENDING), paidAt, createdAt. SEM nome e SEM e-mail do cliente.
-  POST /webhooks/mercadopago    200 | 401 INVALID_SIGNATURE (erro 500 faz o MP reenviar)
+  POST /webhooks/abacatepay     200 | 401 INVALID_SIGNATURE (erro 5xx faz a AbacatePay reenviar; corpo cru, D34)
   POST /dev/payments/simulate   só existe com PAYMENT_PROVIDER=fake
 
 Autenticação:
@@ -169,6 +169,7 @@ Respostas de produto incluem imageUrl = S3_PUBLIC_URL/<image_key> (ou null). O b
  8. FORA da transação, chamar gateway.createCheckout() e salvar checkout_id/checkout_url. Se falhar: 502 com details.orderId; o pedido continua salvo e o retry com a mesma chave conclui o checkout.
 
 8.2 Webhook (PaymentWebhookService.handlePaymentNotification)
+ [D34] Os passos 1 a 3 abaixo descrevem o Mercado Pago, que foi removido. Para a AbacatePay vale a seção 8.9; os passos 4 a 7 (lock do pedido, deduplicação, regras, estoque) continuam iguais.
  1. A rota lê type e data.id (query ou corpo). Se não for "payment", responde 200 e ignora.
  2. Valida a assinatura com WebhookSignatureValidator.validate({ xSignature, xRequestId, dataId, secret }), sem checagem de janela de tempo. Se falhar: 401.
  3. Busca o pagamento em gateway.getPayment(id). NUNCA confiar no corpo do webhook.
@@ -179,6 +180,7 @@ Respostas de produto incluem imageUrl = S3_PUBLIC_URL/<image_key> (ou null). O b
  Cada combinação (provider, payment_id, status) é processada uma única vez; o mesmo pagamento mudando de status (pending -> approved) gera um evento novo, e uma nova tentativa depois de rejected costuma vir com outro payment_id.
 
 8.3 Máquina de estados
+ [D34] O mapeamento abaixo é o do Mercado Pago (removido). O da AbacatePay está na seção 8.9; as transições permitidas não mudam.
  Status do MP -> status alvo do pedido:
   approved -> PAID
   cancelled -> CANCELLED
@@ -190,11 +192,11 @@ Respostas de produto incluem imageUrl = S3_PUBLIC_URL/<image_key> (ou null). O b
 
 8.4 Gateway de pagamento
  interface PaymentGateway {
-   name: string                                   // 'mercadopago' | 'fake'
-   createCheckout(req) -> { checkoutId, checkoutUrl }
-   getPayment(paymentId) -> { id, status, orderId, amountCents }
+   name: string                                   // 'abacatepay' | 'fake'
+   createCheckout(req) -> { checkoutId, checkoutUrl | null, pix?: { brCode, qrCodeImage, expiresAt } }   // checkoutUrl só no fake (página simulada); pix só na AbacatePay
+   getPayment(paymentId) -> { id, status, orderId | null, amountCents | null }   // amountCents e orderId podem ser null (AbacatePay: o /check só devolve o status)
  }
- - MercadoPagoGateway: cria Preference com external_reference = orderId, itens em reais, currency_id BRL, expires: true e expiration_date_to = created_at do pedido + 30 minutos (D19; depois disso o MP não aceita mais pagamento do pedido; D14), requestOptions.idempotencyKey = "preference-<orderId>". Envia auto_return e notification_url só se as URLs forem HTTPS. back_urls apontam para WEB_URL/pedido/:id.
+ - AbacatePayGateway (D34, seção 8.9): cria uma cobrança Pix transparente (POST /transparents/create) com amount = orders.total_cents, expiresIn = segundos até created_at + 30 minutos (D19), externalId = orderId e metadata.orderId; não envia dados do cliente. checkoutId = id da cobrança (pix_char_...); devolve também o brCode (copia e cola), a imagem do QR Code e o expiresAt.
  - FakePaymentGateway: pagamentos num Map em memória; checkoutUrl = WEB_URL/checkout-simulado/:orderId; registerPayment() alimenta /dev/payments/simulate, que chama o MESMO handlePaymentNotification.
 
 8.5 Autenticação do admin
@@ -214,7 +216,7 @@ Respostas de produto incluem imageUrl = S3_PUBLIC_URL/<image_key> (ou null). O b
  - Ajustar estoque: BEGIN; SELECT ... FOR UPDATE no produto; se stock + delta < 0: 409 INVALID_STOCK_ADJUSTMENT e nada muda; senão applyStockMovement com reason, note e admin_id. COMMIT. Usa o mesmo lock do fluxo de pedido, então ajustes e vendas simultâneas não se atropelam.
 
 8.8 Cancelamento manual de pedido abandonado (AdminOrdersService, D14)
- - Expiração automática por job continua fora do escopo (próximo passo, documentar no README). A Preference já expira no MP em 30 min (8.4).
+ - Expiração automática por job continua fora do escopo (próximo passo, documentar no README). A cobrança Pix já expira na AbacatePay (8.4, D34).
  - POST /admin/orders/:id/cancel: BEGIN; SELECT ... FROM orders WHERE id = $1 FOR UPDATE; só cancela se status = PENDING E created_at < agora - 30 minutos. Caso contrário (não existe: 404; PAID/CANCELLED/REFUNDED ou com menos de 30 min: 409 ORDER_NOT_CANCELLABLE) nada muda.
  - Se puder: status = CANCELLED e, para cada item, applyStockMovement com reason 'order_cancelled', delta positivo, order_id e admin_id. COMMIT.
  - A regra dos 30 minutos evita cancelar um pedido que o cliente ainda está pagando. O "agora" é o do banco/servidor; o campo cancellable do GET /admin/orders usa a mesma regra e o web só mostra o botão "Cancelar pedido" quando for true.
@@ -226,6 +228,15 @@ Respostas de produto incluem imageUrl = S3_PUBLIC_URL/<image_key> (ou null). O b
  interface StorageService { createUpload(contentType) -> { uploadUrl, fields, key }; publicUrl(key) -> string }
  Implementações: S3StorageService (funciona com AWS e MinIO) e FakeStorageService (testes).
 
+
+8.9 Provedor AbacatePay (D34)
+ - Cobrança: Pix transparente. POST {ABACATEPAY_API_URL}/transparents/create com Authorization: Bearer <ABACATEPAY_API_KEY> e corpo { method: "PIX", data: { amount, expiresIn, externalId: orderId, description: "Pedido <id curto>", metadata: { orderId } } }. Valor em centavos, vindo do banco (regra do preço). expiresIn mínimo 300 s: se faltar menos que isso até created_at + 30 min, o checkout não é refeito e a resposta é 502 CHECKOUT_UNAVAILABLE com details.reason = 'expired' (D19). Nenhum dado pessoal do cliente é enviado (sem CPF). O ambiente (teste ou produção) é definido pela chave (abc_dev_ ou abc_prod_), não pela URL.
+ - Guardado no pedido (migração 002): checkout_id = id da cobrança (pix_char_...), pix_code (copia e cola), pix_qr_image (data URI PNG) e pix_expires_at. A resposta pública do pedido (publicOrderSchema) ganha pix: { brCode, qrCodeImage, expiresAt } | null, preenchido só enquanto o pedido está PENDING, como o checkoutUrl; nunca traz dados do cliente.
+ - Webhook: POST /webhooks/abacatepay, com o CORPO CRU (express.raw, montado antes do parser de JSON). Ordem: (1) compara o header X-Webhook-Secret com ABACATEPAY_WEBHOOK_SECRET em tempo constante; (2) confere X-Webhook-Signature = HMAC-SHA256 do corpo cru, em base64, com a chave pública da AbacatePay (a mesma para todas as contas, publicada na documentação; é uma constante do código, não um segredo), em tempo constante; qualquer falha: 401 INVALID_SIGNATURE (a AbacatePay não reenvia 401); (3) lê o JSON; eventos tratados: transparent.completed, transparent.refunded, transparent.lost e transparent.disputed; qualquer outro evento: 200 e ignora; (4) acha o pedido por orders.checkout_id = data.transparent.id (NUNCA por externalId, que pode vir nulo, e nunca confiando no corpo); (5) reconsulta GET /transparents/check?id=<id> e usa o STATUS da resposta, não o do corpo; (6) segue os passos 4 a 7 da seção 8.2 (lock do pedido antes do payment_event, deduplicação por (provider, payment_id, status), regras, estoque).
+ - Mapeamento do status reconsultado para o alvo: PAID -> PAID; REFUNDED -> REFUNDED; UNDER_DISPUTE -> nenhum (registrado como no_change); PENDING, APPROVED, FAILED, REDEEMED -> nenhum; EXPIRED e CANCELLED -> nenhum (a AbacatePay não envia webhook de expiração; o pedido continua PENDING até o admin cancelar depois de 30 min, D14). transparent.lost (disputa perdida) é tratado como REFUNDED, sem devolver estoque (D13).
+ - amount_mismatch não se aplica à AbacatePay: o valor do Pix é fixado por nós ao criar a cobrança e o /check não devolve valor. A regra continua valendo para o fake e para o /dev/payments/simulate.
+ - Resposta do webhook: 2xx em até 30 s para tudo que foi tratado (inclusive pedido ou pagamento não encontrado, para não gerar reenvio inútil); erro interno responde 5xx e a AbacatePay reenvia (até 7 vezes em cerca de 18 h). A deduplicação cobre os reenvios.
+ - Fake: o FakePaymentGateway continua com checkoutUrl = WEB_URL/checkout-simulado/:orderId e /dev/payments/simulate. Testes do gateway e do webhook da AbacatePay usam um servidor HTTP falso (nada de rede real); a prova com a API de verdade usa o modo teste da AbacatePay, com POST /transparents/simulate-payment?id=<pix_id> e uma chave abc_dev_ (T22c).
 ========================================
 9. FRONT-END (apps/web)
 ========================================
@@ -279,7 +290,7 @@ Identidade visual (D25): brutalismo editorial sobre a bancada de trabalho.
 - Links: sublinhado de 2px que cresce de 0 a 1 (cubic-bezier(0.165, 0.84, 0.44, 1)); em --mat sobre --paper e em --tape sobre --mat. Foco visível: outline de 2px --ink com offset de 2px sobre --paper e --tape sobre --mat.
 - Botões: retângulo sem raio, texto maiúsculo negrito; primário em --tape com texto --ink; hover inverte para --mat com texto --paper.
 - Produto sem imagem: ícone SVG em traço da categoria sobre fundo --mat quadriculado (grade fina de 16px e grade forte de 80px).
-- Rodapé: 4 colunas sobre --paper (marca, loja, pagamento, sobre; títulos em maiúsculas 20px), bloco escuro --mat com como pagar (Mercado Pago e modo simulado), e o nome "BANCADA" enorme (8vw) em tom fantasma (--ink a 8% de opacidade) no final. Sem newsletter (e-mails estão fora do escopo).
+- Rodapé: 4 colunas sobre --paper (marca, loja, pagamento, sobre; títulos em maiúsculas 20px), bloco escuro --mat com como pagar (Pix e modo simulado), e o nome "BANCADA" enorme (8vw) em tom fantasma (--ink a 8% de opacidade) no final. Sem newsletter (e-mails estão fora do escopo).
 - Admin: mesmos tokens e fontes, sem hero e com ruído a 0.04; header "Bancada · Admin" em --mat com links Produtos e Pedidos e botão "Sair". Tabelas limpas com bordas de 1px --ink, números em mono, status com etiqueta (ativo em --ok, inativo em cinza), densidade maior que a loja.
 - Funciona a partir de 360px de largura, foco visível, label em todo input, erros com role="alert", prefers-reduced-motion respeitado (sem scale, sem transição de selo e sem animação de sublinhado).
 - Textos da interface em PT-BR; títulos e rótulos em maiúsculas via CSS (text-transform), o conteúdo no código em sentence case; botões dizem o que fazem ("Pagar R$ 279,70", "Salvar produto", não "Enviar").
@@ -321,7 +332,7 @@ Admin
 - cancelar pedido antes de 30 min: 409 ORDER_NOT_CANCELLABLE; depois de 30 min: cancela e devolve o estoque (movimento 'order_cancelled' com admin_id); cancelar pedido PAID: 409
 - POST em rota /admin com cookie válido e sem o header X-Requested-With: 403 CSRF_REJECTED
 - GET /orders/:id (público) não contém customer (nem nome nem e-mail); GET /admin/orders contém
-- Preference criada com expires: true e expiration_date_to = created_at + 30 min (verificado no FakePaymentGateway/mock do SDK)
+- Cobrança Pix criada com expiresIn = segundos até created_at + 30 min (D34; verificado com a API da AbacatePay simulada)
 - estorno não altera o estoque
 - produto desativado some do GET /products e novo pedido com ele dá 422
 - upload: tipo inválido dá 400 INVALID_FILE_TYPE; tipo válido devolve uploadUrl, fields e key
@@ -373,6 +384,7 @@ D30 Admin web, detalhes de implementação: (a) a sessão é só o cookie httpOn
 D31 Admin web, produtos (T18): (a) o preço é digitado em reais (vírgula para os centavos; ponto só como milhar ou decimal inequívoco) e convertido para centavos só com aritmética inteira, nunca com float; (b) o POST de criação não envia active, stock nem slug (o schema é strict); na edição o slug é somente leitura e o estoque só aparece (o ajuste é da T19); (c) o PATCH leva só o que mudou: sem mudança nenhuma a API não é chamada; imagem mantida deixa o imageKey ausente, removida manda null (só se havia imagem) e trocada manda a nova chave (D16); (d) upload: o cliente valida tipo (JPEG, PNG ou WebP), 0 byte e 2 MB antes de pedir o presigned POST; o POST ao S3 vai sem credenciais, com os fields antes do arquivo, mostra progresso e pode ser cancelado (o signal também cobre a requisição do presign); um envio obsoleto não altera o estado do envio atual, e o Salvar fica bloqueado enquanto há envio em andamento; imagem enviada e não salva vira órfã no S3 (aceito, D16); (e) 'Descartar nova imagem' restaura a decisão anterior (inclusive a remoção); (f) depois de salvar, invalida ['admin','products'], ['admin','product',id] e ['products'] e volta à lista com um aviso passado por location.state; (g) a busca por nome da lista tem pausa (debounce) antes de filtrar.
 D32 Admin web, estoque e pedidos (T19): (a) o ajuste de estoque é um inteiro com sinal diferente de zero, com motivo restock ou adjustment e nota opcional; 409 INVALID_STOCK_ADJUSTMENT mostra que nada foi alterado; o endpoint não tem chave de idempotência, então numa falha de rede a mensagem manda conferir o histórico antes de repetir (e o detalhe do produto é recarregado); (b) o histórico mostra as últimas 20 movimentações do detalhe do produto (data, motivo, variação, estoque após, nota e pedido); (c) a lista de pedidos guarda o filtro de status e a página na URL; valor inválido cai no padrão, e uma página além do fim redireciona (replace) para a última existente; (d) o botão 'Cancelar pedido' aparece só quando o servidor marca cancellable (nunca calculado no cliente), com diálogo de confirmação próprio (sem window.confirm): foco inicial em Voltar, foco preso, Esc fecha, resto da página inerte, e o foco volta ao botão que abriu; (e) 404 e 409 ORDER_NOT_CANCELLABLE no cancelamento recarregam a lista e avisam; (f) a lista de pedidos se atualiza ao voltar o foco à janela e a cada 60 s (um pedido pago pelo webhook perde o botão sozinho); (g) dados do cliente ficam só na memória do TanStack Query (nunca em localStorage ou sessionStorage) e saem do cache no logout; (h) depois de ajustar ou cancelar invalida ['admin','products'], ['admin','product',id], ['products'] e, no cancelamento, ['admin','orders'].
 D33 Docker (T20): (a) a prova do `docker compose up --build` é o workflow .github/workflows/docker.yml (o computador do autor não tem Docker nem disco para isso): sobe db, minio, minio-init, api e web e confere com curl a API e o seed (D17, com um preço editado que sobrevive ao restart), o web (fallback de SPA, cache, gzip), o admin (criar admin pelo script, login, cookie httpOnly e CORS) e o upload direto ao MinIO; roda no push para a main, em PRs que mexem em api, web, packages ou infra, e sob demanda; (b) API: imagem multi-stage com usuário node, NODE_ENV=production e só dependências de produção; o entrypoint migra (com pg_advisory_lock), semeia só com SEED_ON_START=true e faz exec do Node (PID 1 com handler de SIGTERM); (c) S3_PUBLIC_ENDPOINT é o endpoint do S3 como o NAVEGADOR o enxerga, usado só para assinar o uploadUrl do presigned POST (no Docker a API fala com http://minio:9000 e o navegador com http://localhost:9000); ausente, vale S3_ENDPOINT (AWS não muda); (d) web: nginx sem root na porta 8080, VITE_API_URL é build arg (vira parte do bundle: outra URL exige refazer a imagem), assets com hash em cache longo e index.html sem cache; (e) o compose é só para desenvolvimento e demonstração: senhas e JWT secret são de dev, db e minio ficam expostos nas portas locais e PAYMENT_PROVIDER=fake; (f) a CSP do nginx está em modo Report-Only e sem endpoint de relatório: promovê-la a Content-Security-Policy fica para os Próximos passos.
+D34 Troca do provedor de pagamento: a AbacatePay substitui o Mercado Pago (o código, o SDK, a rota /webhooks/mercadopago e as instruções do Mercado Pago saem do projeto). Escolhido o Pix transparente, e não o checkout hospedado, porque o checkout hospedado exige produtos cadastrados na AbacatePay (o preço sairia do catálogo deles e não do nosso banco) e não tem expiração (D19). Detalhes na seção 8.9: (a) valor em centavos do nosso banco e expiresIn ancorado em created_at + 30 min; (b) migração 002 com pix_code, pix_qr_image e pix_expires_at, e pix no schema público do pedido enquanto PENDING; (c) webhook com corpo cru, segredo no header, HMAC-SHA256 em base64, localização do pedido por checkout_id e reconsulta do status em /transparents/check; (d) não há eventos de expiração ou cancelamento, então o pedido expirado continua sendo cancelado pelo admin (D14); (e) o web mostra o QR Code, o copia e cola e a contagem regressiva, com o polling de 3 s já existente; (f) só Pix (sem cartão nem boleto); (g) D14 e D19 continuam valendo, trocando 'Preference' por 'cobrança Pix'.
 Mudança de arquitetura só registrando uma nova decisão aqui.
 
 ========================================
@@ -423,7 +435,9 @@ T19 [web] Painel de estoque (ajuste + histórico) e lista de pedidos com botão 
 Fase 6 · Entrega
 T20 [api] Docker completo: Dockerfiles da API e do web, compose com db, minio, minio-init, api e web. Aceite: docker compose up --build deixa loja e admin funcionando.
 T21 [org] README com prints, diagrama Mermaid dos fluxos de pagamento e estoque, decisões, como criar o admin, modo fake e modo Mercado Pago (com ngrok), tabela de endpoints, e seção "Próximos passos" (expiração automática de pedidos por job, limpeza de imagens órfãs no S3).
-T22 [org + api] Teste com o Mercado Pago real (credenciais de teste + túnel + webhook cadastrado no painel).
+T22a [api] AbacatePayGateway, migração 002, webhook /webhooks/abacatepay e remoção do Mercado Pago (D34, 8.9). Aceite: testes do gateway e do webhook com servidor HTTP falso (assinatura, segredo, deduplicação, reconsulta, expiração, estorno sem restock) e CI verde.
+T22b [web] Pagamento por Pix na página do pedido: QR Code, copia e cola, contagem regressiva, expiração e fluxo do fake preservado. Aceite: pedido novo mostra o Pix; ao pagar vira Pago pelo polling.
+T22c [org + api] Teste real no modo teste da AbacatePay (chave abc_dev_, túnel, webhook cadastrado, simulate-payment), com README atualizado (modo AbacatePay no lugar do Mercado Pago).
 T23 [org] Deploy: API na AWS (App Runner ou ECS + RDS + S3) e web na Vercel. Links no README.
 
 ========================================
