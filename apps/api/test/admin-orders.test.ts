@@ -68,6 +68,55 @@ async function cancelledMovements(orderId: string) {
 
 const cancel = (id: string) => ctx.post(`/admin/orders/${id}/cancel`);
 
+// SQL de TODA consulta feita enquanto `run` executa (o pool é o mesmo que o app usa).
+async function sqlDuring(run: () => Promise<unknown>): Promise<string[]> {
+  const seen: string[] = [];
+  const original = pool.query.bind(pool);
+  const spy = jest.spyOn(pool, 'query').mockImplementation(((sql: unknown, ...rest: unknown[]) => {
+    seen.push(typeof sql === 'string' ? sql : JSON.stringify(sql));
+    return (original as (...a: unknown[]) => unknown)(sql, ...rest);
+  }) as typeof pool.query);
+  try {
+    await run();
+  } finally {
+    spy.mockRestore();
+  }
+  return seen;
+}
+
+describe('o Pix (QR Code em base64) não é lido nas consultas do admin', () => {
+  it('GET /admin/orders não seleciona pix_qr_image nem pix_code', async () => {
+    await oldOrder();
+    await pool.query(
+      `UPDATE orders SET pix_code = 'x', pix_qr_image = 'data:image/png;base64,AAAA', pix_expires_at = now()`,
+    );
+    let status = 0;
+    const sql = await sqlDuring(async () => {
+      status = (await ctx.get('/admin/orders')).status;
+    });
+    expect(status).toBe(200);
+    const listing = sql.filter((s) => /FROM orders/i.test(s));
+    expect(listing.length).toBeGreaterThan(0);
+    for (const statement of listing) expect(statement).not.toMatch(/pix_/);
+  });
+
+  it('o cancelamento do admin também não lê o Pix, e a resposta continua sem pix', async () => {
+    const order = await oldOrder();
+    await pool.query(
+      `UPDATE orders SET pix_code = 'x', pix_qr_image = 'data:image/png;base64,AAAA'`,
+    );
+    let body: Record<string, unknown> = {};
+    const sql = await sqlDuring(async () => {
+      body = (await cancel(order.id)).body.data;
+    });
+    expect(body.status).toBe('CANCELLED');
+    expect(body).not.toHaveProperty('pix');
+    for (const statement of sql.filter((s) => /FROM orders/i.test(s))) {
+      expect(statement).not.toMatch(/pix_/);
+    }
+  });
+});
+
 describe('GET /admin/orders', () => {
   it('traz o pedido completo (customer, itens, checkout) e valida no orderSchema', async () => {
     const order = await newOrder();

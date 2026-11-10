@@ -10,7 +10,7 @@ import { AppError } from '../../shared/errors.js';
 import { isCancellable } from '../orders/order-status.js';
 import { toAdminOrder } from '../orders/orders.mapper.js';
 import {
-  findOrderById,
+  findOrderByIdWithoutPix,
   listItemsByProduct,
   listOrdersPage,
   lockOrderForUpdate,
@@ -71,7 +71,7 @@ export class AdminOrdersService {
         });
       }
     });
-    const cancelled = await findOrderById(this.deps.pool, orderId);
+    const cancelled = await findOrderByIdWithoutPix(this.deps.pool, orderId);
     return toAdminOrder(cancelled!, this.now());
   }
 }

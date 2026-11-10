@@ -58,9 +58,10 @@ interface OrderRow {
   payment_provider: string;
   checkout_id: string | null;
   checkout_url: string | null;
-  pix_code: string | null;
-  pix_qr_image: string | null;
-  pix_expires_at: Date | null;
+  // Só nas consultas públicas (ORDER_COLUMNS_WITH_PIX): o admin não lê o QR Code em base64.
+  pix_code?: string | null;
+  pix_qr_image?: string | null;
+  pix_expires_at?: Date | null;
   paid_at: Date | null;
   created_at: Date;
 }
@@ -73,8 +74,9 @@ interface ItemRow {
 }
 
 const ORDER_COLUMNS = `id, idempotency_key, request_hash, customer_name, customer_email, status,
-                       total_cents, payment_provider, checkout_id, checkout_url,
-                       pix_code, pix_qr_image, pix_expires_at, paid_at, created_at`;
+                       total_cents, payment_provider, checkout_id, checkout_url, paid_at, created_at`;
+// A resposta pública do pedido mostra o Pix (só enquanto PENDING); as consultas do admin não o leem.
+const ORDER_COLUMNS_WITH_PIX = `${ORDER_COLUMNS}, pix_code, pix_qr_image, pix_expires_at`;
 
 function toOrder(row: OrderRow): OrderRecord {
   return {
@@ -88,9 +90,9 @@ function toOrder(row: OrderRow): OrderRecord {
     paymentProvider: row.payment_provider,
     checkoutId: row.checkout_id,
     checkoutUrl: row.checkout_url,
-    pixCode: row.pix_code,
-    pixQrImage: row.pix_qr_image,
-    pixExpiresAt: row.pix_expires_at,
+    pixCode: row.pix_code ?? null,
+    pixQrImage: row.pix_qr_image ?? null,
+    pixExpiresAt: row.pix_expires_at ?? null,
     paidAt: row.paid_at,
     createdAt: row.created_at,
   };
@@ -144,13 +146,22 @@ export async function findOrderByIdempotencyKey(
   key: string,
 ): Promise<OrderWithItems | null> {
   const { rows } = await db.query<OrderRow>(
-    `SELECT ${ORDER_COLUMNS} FROM orders WHERE idempotency_key = $1`,
+    `SELECT ${ORDER_COLUMNS_WITH_PIX} FROM orders WHERE idempotency_key = $1`,
     [key],
   );
   return withItems(db, rows[0]);
 }
 
 export async function findOrderById(db: Db, id: string): Promise<OrderWithItems | null> {
+  const { rows } = await db.query<OrderRow>(
+    `SELECT ${ORDER_COLUMNS_WITH_PIX} FROM orders WHERE id = $1`,
+    [id],
+  );
+  return withItems(db, rows[0]);
+}
+
+// Mesmo pedido, sem as colunas do Pix (QR Code em base64): para o admin, que não mostra o Pix.
+export async function findOrderByIdWithoutPix(db: Db, id: string): Promise<OrderWithItems | null> {
   const { rows } = await db.query<OrderRow>(`SELECT ${ORDER_COLUMNS} FROM orders WHERE id = $1`, [
     id,
   ]);
