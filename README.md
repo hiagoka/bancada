@@ -332,3 +332,30 @@ Envelope: sucesso `{ "data": ... }`; erro `{ "error": { "code", "message", "deta
 | `POST`  | `/admin/orders/:id/cancel`     | admin                  | Cancela um pedido `PENDING` criado há mais de 30 minutos e devolve o estoque. `404`, `409 ORDER_NOT_CANCELLABLE`.                                                                                                  |
 
 As rotas de `/admin` exigem o cookie do admin (`401 UNAUTHORIZED` sem ele). A lista acima foi conferida com os routers em `apps/api/src/modules`.
+
+## Testes e CI
+
+```bash
+npm test                      # contracts (Jest), API (Jest) e web (Vitest)
+npm test -w @bancada/api      # só a API
+npm run lint                  # ESLint na raiz
+npm run format:check          # Prettier
+npm run typecheck             # compila o contracts e roda o tsc de todos os workspaces
+npm run build                 # build de tudo
+```
+
+**API.** Os testes rodam contra um PostgreSQL **real**, sem mock de banco, no banco de `TEST_DATABASE_URL` (padrão `postgres://bancada:bancada@localhost:5432/bancada_test`). O `globalSetup` cria o banco se não existir, recria o schema e roda as migrações; cada teste faz `TRUNCATE` e semeia de novo. Ele recusa qualquer banco cujo nome não termine em `_test`, para nunca apagar dados reais. Os testes de integração do S3 usam o MinIO real: sem ele **pulam com um aviso**, e com `REQUIRE_MINIO=true` **falham** (o CI define essa variável):
+
+```bash
+docker compose up -d db minio minio-init
+REQUIRE_MINIO=true npm test
+```
+
+O que eles cobrem (entre outras coisas): total com o preço do banco, replay e concorrência da mesma `Idempotency-Key` (um só pedido), 6 pedidos simultâneos para 3 unidades (exatamente 3 dão certo), falha do gateway seguida de retry sem duplicar, webhook (aprovado, recusado e depois aprovado, cancelado com devolução, estorno sem devolução, duplicado, valor adulterado, transição inválida, assinatura válida e inválida, e uma regressão de deadlock com notificações simultâneas), login com a mesma resposta para e-mail inexistente e senha errada, rate limit do login, CSRF, ajustes do admin concorrentes com pedidos (estoque final igual à soma dos movimentos), cancelamento manual e o upload.
+
+**Web.** Vitest com Testing Library: formulários, carrinho, checkout, página do pedido com polling, `RequireAdmin`, upload e telas do admin. Não há teste de ponta a ponta em navegador nem teste automático de contraste.
+
+**CI (GitHub Actions).**
+
+- `CI` (`.github/workflows/ci.yml`): a cada push na `main` e em pull request, com um PostgreSQL como _service_: `npm ci`, build do contracts, lint, `format:check`, typecheck, sobe o MinIO pelo `docker-compose.yml` (o que também prova o `minio` e o `minio-init`), `npm test` com `REQUIRE_MINIO=true` e build.
+- `Docker` (`.github/workflows/docker.yml`, D33): sobe a stack inteira com `docker compose up --build` e confere com `curl` a API e o seed (inclusive que um preço editado sobrevive ao restart), a loja (fallback de SPA, cache e gzip), o admin (criar admin pelo script, login, cookie `httpOnly` e CORS) e o upload de imagem direto ao MinIO. Roda no push na `main`, em pull requests que mexem em `apps/api`, `apps/web`, `packages` ou na infra de Docker, e sob demanda (aba Actions, "Run workflow").
