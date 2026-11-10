@@ -100,6 +100,12 @@ describe('createApp', () => {
     expect(other.headers['access-control-allow-origin']).not.toBe('http://evil.example');
   });
 
+  it('CORS: expõe o header Date (o web corrige a contagem do Pix pelo relógio do servidor)', async () => {
+    const res = await request(app).get('/health').set('Origin', webUrl);
+    expect(String(res.headers['access-control-expose-headers']).toLowerCase()).toContain('date');
+    expect(res.headers.date).toBeTruthy();
+  });
+
   it('CORS: preflight permite Content-Type, Idempotency-Key e X-Requested-With', async () => {
     const res = await request(app)
       .options('/health')

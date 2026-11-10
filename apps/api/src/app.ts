@@ -108,6 +108,9 @@ export function createApp({
       credentials: true,
       methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
       allowedHeaders: ['Content-Type', 'Idempotency-Key', 'X-Requested-With'],
+      // Date não é legível por JavaScript entre origens sem isto: o web usa o relógio do servidor
+      // na contagem regressiva do Pix (a validade é um instante do relógio dele).
+      exposedHeaders: ['Date'],
     }),
   );
   // CSRF (D15) ANTES do parser: um POST sem os cabeçalhos é recusado mesmo com JSON malformado.
