@@ -187,13 +187,23 @@ describe('OrdersListPage: filtro e paginação pela URL', () => {
     await waitFor(() => expect(where()).toBe('/admin/pedidos?status=PAID&page=2'));
   });
 
-  it('página além do fim (lista vazia, página > 1): link para a primeira página', async () => {
-    mockList.mockResolvedValue(makeOrdersPage([], 9, 45));
-    renderPage('/admin/pedidos?page=9');
+  it('página além do fim com pedidos existindo (ex.: cancelou o último da última página): redireciona (replace) para a última', async () => {
+    mockList.mockResolvedValueOnce(makeOrdersPage([], 9, 41)); // 41 pedidos = 3 páginas; o servidor devolve a página pedida
+    mockList.mockResolvedValue(makeOrdersPage([makeAdminOrder()], 3, 41));
+    renderPage('/admin/pedidos?status=PAID&page=9');
+    await waitFor(() => expect(where()).toBe('/admin/pedidos?status=PAID&page=3'));
+    await screen.findByRole('table');
+    expect(mockList).toHaveBeenLastCalledWith({ status: 'PAID', page: 3 }, expect.anything());
+    expect(screen.queryByText('Nenhum pedido nesta página.')).toBeNull();
+  });
+
+  it('sem nenhum pedido em página > 1: mensagem e link para a primeira página', async () => {
+    mockList.mockResolvedValue(makeOrdersPage([], 9, 0));
+    renderPage('/admin/pedidos?status=PAID&page=9');
     expect(await screen.findByText('Nenhum pedido nesta página.')).toBeTruthy();
     expect(
       screen.getByRole('link', { name: 'Ir para a primeira página' }).getAttribute('href'),
-    ).toBe('/admin/pedidos');
+    ).toBe('/admin/pedidos?status=PAID');
   });
 });
 

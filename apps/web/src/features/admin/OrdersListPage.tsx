@@ -1,6 +1,6 @@
 import { orderStatusSchema, type Order } from '@bancada/contracts';
 import { useEffect, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router';
+import { Link, Navigate, useSearchParams } from 'react-router';
 import { ApiError, NetworkError } from '../../api/http';
 import { Button } from '../../components/Button';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
@@ -68,6 +68,11 @@ export function OrdersListPage() {
       busy.current = false;
     }
   };
+
+  // Cancelar o último pedido da última página deixa a página pedida vazia: vai à última existente.
+  if (data && data.items.length === 0 && data.total > 0 && data.page > totalPages) {
+    return <Navigate replace to={ordersHref({ status: filters.status, page: totalPages })} />;
+  }
 
   const count = data?.total ?? 0;
 
