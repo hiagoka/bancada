@@ -1,0 +1,28 @@
+# Contexto de build dos Dockerfiles (apps/api/Dockerfile e apps/web/Dockerfile): a RAIZ do repositório.
+# Fica de fora tudo que é gerado, local ou secreto: o build refaz node_modules e dist dentro da imagem.
+.git
+.github
+.maestri
+.vscode
+.idea
+.DS_Store
+**/.DS_Store
+
+**/node_modules
+**/dist
+**/coverage
+**/.vite
+**/*.tsbuildinfo
+**/*.log
+
+# Segredos e configuração local nunca entram na imagem.
+.env
+.env.*
+**/.env
+**/.env.*
+
+# Documentação e testes não participam do build.
+*.md
+docker-compose*.yml
+**/Dockerfile
+apps/api/test
