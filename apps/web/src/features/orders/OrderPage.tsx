@@ -6,6 +6,7 @@ import { formatDateTime } from '../../lib/format';
 import { shortId } from '../../lib/shortId';
 import { useDocumentTitle } from '../../lib/useDocumentTitle';
 import { OrderSummary } from './OrderSummary';
+import { PixPayment } from './PixPayment';
 import { OrderTracker } from './OrderTracker';
 import { StatusPill } from './StatusPill';
 import { statusAnnouncement } from './orderStatus';
@@ -17,10 +18,12 @@ function PaymentPanel({
   order,
   pollingStopped,
   onRefresh,
+  onPixExpired,
 }: {
   order: PublicOrder;
   pollingStopped: boolean;
   onRefresh: () => void;
+  onPixExpired: () => Promise<unknown>;
 }) {
   if (order.status === 'PAID') {
     return (
@@ -48,7 +51,25 @@ function PaymentPanel({
     );
   }
 
-  // PENDING
+  // PENDING com Pix (AbacatePay, D34): QR Code, copia e cola e contagem. É o caminho de pagamento
+  // do provedor real; o modo fake (sem pix) continua indo para o checkout simulado, abaixo.
+  if (order.pix) {
+    return (
+      <>
+        <PixPayment
+          key={order.pix.expiresAt}
+          orderId={order.id}
+          pix={order.pix}
+          onExpired={onPixExpired}
+        />
+        <p className="order-panel__hint">
+          Acabou de pagar? A confirmação costuma levar poucos segundos. Não pague de novo.
+        </p>
+      </>
+    );
+  }
+
+  // PENDING sem Pix
   // O destino SEMPRE passa pela mesma regra segura do checkout (http(s), sem credenciais).
   const target = paymentTarget(order.checkoutUrl, order.id, window.location.origin);
   const windowOpen = isPaymentWindowOpen(order.createdAt, Date.now());
@@ -180,7 +201,12 @@ export function OrderPage() {
           ) : null}
           <StatusPill status={order.status} />
           <OrderTracker status={order.status} />
-          <PaymentPanel order={order} pollingStopped={pollingStopped} onRefresh={restartPolling} />
+          <PaymentPanel
+            order={order}
+            pollingStopped={pollingStopped}
+            onRefresh={restartPolling}
+            onPixExpired={refetch}
+          />
           <OrderSummary order={order} />
           <dl className="order-dates">
             <div>

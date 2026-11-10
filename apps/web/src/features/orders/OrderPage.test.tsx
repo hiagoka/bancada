@@ -8,7 +8,8 @@ import { ApiError, NetworkError } from '../../api/http';
 import { getOrder } from '../../api/orders';
 import { ORDER_ID, makeOrder } from '../../test/orderFixtures';
 import { OrderPage } from './OrderPage';
-import { POLL_LIMIT_MS, orderQueryKey } from './useOrder';
+import { POLL_INTERVAL_MS, POLL_LIMIT_MS, orderQueryKey } from './useOrder';
+import { resetServerClock } from '../../lib/serverClock';
 
 vi.mock('../../api/orders', () => ({ getOrder: vi.fn() }));
 const mockGetOrder = vi.mocked(getOrder);
@@ -35,6 +36,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.useRealTimers();
+  resetServerClock();
 });
 
 const live = () => document.querySelector('[role=status][aria-live=polite]')?.textContent ?? '';
@@ -305,5 +307,160 @@ describe('OrderPage: anúncios e polling', () => {
     expect(mockGetOrder.mock.calls.length).toBe(calls + 1);
     expect(await screen.findByText('Pago')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Atualizar' })).toBeNull();
+  });
+});
+
+describe('OrderPage: pagamento por Pix (D34)', () => {
+  const BR_CODE = '00020101021226950014br.gov.bcb.pix0136teste-copia-e-cola';
+  const QR = 'data:image/png;base64,iVBORw0KGgo=';
+  const pixIn = (seconds: number) => ({
+    brCode: BR_CODE,
+    qrCodeImage: QR,
+    expiresAt: new Date(Date.now() + seconds * 1000).toISOString(),
+  });
+
+  it('PENDING com Pix: mostra o bloco "Pague com Pix" no lugar do checkout externo', async () => {
+    mockGetOrder.mockResolvedValue(makeOrder({ pix: pixIn(1800), checkoutUrl: null }));
+    renderPage();
+    expect(await screen.findByRole('heading', { level: 2, name: 'Pague com Pix' })).toBeTruthy();
+    expect(screen.getByRole('img', { name: /QR Code do Pix/ }).getAttribute('src')).toBe(QR);
+    expect((screen.getByLabelText('Pix copia e cola') as HTMLInputElement).value).toBe(BR_CODE);
+    expect(screen.getByRole('button', { name: 'Copiar código' })).toBeTruthy();
+    expect(screen.getByText('Aguardando pagamento')).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Ir para o pagamento' })).toBeNull();
+    expect(screen.queryByText(/Estamos preparando o pagamento/)).toBeNull();
+    expect(screen.getByText(/Não pague de novo/)).toBeTruthy();
+  });
+
+  it('um h1 só (o bloco do Pix usa h2)', async () => {
+    mockGetOrder.mockResolvedValue(makeOrder({ pix: pixIn(1800) }));
+    renderPage();
+    await screen.findByRole('heading', { level: 2, name: 'Pague com Pix' });
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+  });
+
+  it('PAID substitui o Pix pela confirmação (QR Code e copia e cola somem)', async () => {
+    mockGetOrder.mockResolvedValue(makeOrder({ pix: pixIn(1800) }));
+    renderPage();
+    await screen.findByRole('heading', { name: 'Pague com Pix' });
+    act(() =>
+      client.setQueryData(
+        orderQueryKey(ORDER_ID),
+        makeOrder({ status: 'PAID', pix: null, paidAt: '2026-10-27T15:45:00.000Z' }),
+      ),
+    );
+    expect(await screen.findByText(/Obrigado pela compra!/)).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Pague com Pix' })).toBeNull();
+    expect(screen.queryByRole('img', { name: /QR Code/ })).toBeNull();
+    expect(document.body.textContent).not.toContain(BR_CODE);
+  });
+
+  it.each(['CANCELLED', 'REFUNDED'] as const)('%s também tira o Pix da tela', async (status) => {
+    mockGetOrder.mockResolvedValue(makeOrder({ status, pix: null }));
+    renderPage();
+    await screen.findAllByText(status === 'CANCELLED' ? 'Cancelado' : 'Estornado');
+    expect(screen.queryByRole('heading', { name: 'Pague com Pix' })).toBeNull();
+  });
+
+  it('modo fake intacto: sem Pix e com checkoutUrl de mesma origem, "Ir para o pagamento" leva ao checkout simulado', async () => {
+    mockGetOrder.mockResolvedValue(
+      makeOrder({
+        pix: null,
+        createdAt: new Date().toISOString(),
+        checkoutUrl: `${window.location.origin}/checkout-simulado/${ORDER_ID}`,
+      }),
+    );
+    renderPage();
+    const link = await screen.findByRole('link', { name: 'Ir para o pagamento' });
+    expect(link.getAttribute('href')).toBe(`/checkout-simulado/${ORDER_ID}`);
+    expect(screen.queryByRole('heading', { name: 'Pague com Pix' })).toBeNull();
+  });
+
+  it('PENDING sem Pix e sem checkoutUrl: mensagem clara e o polling continua', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    mockGetOrder.mockResolvedValue(makeOrder({ pix: null, checkoutUrl: null }));
+    renderPage();
+    expect(await screen.findByText(/Estamos preparando o pagamento/)).toBeTruthy();
+    const calls = mockGetOrder.mock.calls.length;
+    await act(async () => void (await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 2 + 100)));
+    expect(mockGetOrder.mock.calls.length).toBeGreaterThan(calls);
+  });
+
+  it('o Pix aparece sozinho quando o pedido ganha a cobrança depois (polling)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    mockGetOrder.mockResolvedValue(makeOrder({ pix: null, checkoutUrl: null }));
+    renderPage();
+    await screen.findByText(/Estamos preparando o pagamento/);
+    mockGetOrder.mockResolvedValue(makeOrder({ pix: pixIn(1800) }));
+    await act(async () => void (await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS + 100)));
+    expect(await screen.findByRole('heading', { name: 'Pague com Pix' })).toBeTruthy();
+  });
+
+  it('com Pix a página segue consultando depois de 5 minutos (e sem o botão "Atualizar")', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    mockGetOrder.mockResolvedValue(makeOrder({ pix: pixIn(30 * 60) }));
+    renderPage();
+    await screen.findByRole('heading', { name: 'Pague com Pix' });
+    await act(async () => void (await vi.advanceTimersByTimeAsync(POLL_LIMIT_MS + 30_000)));
+    const calls = mockGetOrder.mock.calls.length;
+    await act(async () => void (await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 2 + 100)));
+    expect(mockGetOrder.mock.calls.length).toBeGreaterThan(calls);
+    expect(screen.queryByRole('button', { name: 'Atualizar' })).toBeNull();
+    expect(screen.queryByText(/Ainda aguardando a confirmação/)).toBeNull();
+  });
+
+  it('o tempo zera com o pedido ainda PENDING: UMA última consulta e "O tempo para pagar acabou."', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    mockGetOrder.mockResolvedValue(makeOrder({ pix: pixIn(4) }));
+    renderPage();
+    await screen.findByRole('heading', { name: 'Pague com Pix' });
+    expect(screen.queryByText('O tempo para pagar acabou.')).toBeNull();
+    await act(async () => void (await vi.advanceTimersByTimeAsync(5000)));
+    expect(await screen.findByText('O tempo para pagar acabou.')).toBeTruthy();
+    expect(screen.queryByRole('img', { name: /QR Code/ })).toBeNull();
+    expect(screen.queryByLabelText('Pix copia e cola')).toBeNull();
+    expect(screen.getByRole('link', { name: 'Voltar ao catálogo' }).getAttribute('href')).toBe('/');
+    expect(screen.getByRole('link', { name: 'Ir para o carrinho' }).getAttribute('href')).toBe(
+      '/carrinho',
+    );
+  });
+
+  it('a última consulta mostra PAID (pagou no último segundo): vira confirmação, não "tempo acabou"', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    mockGetOrder.mockResolvedValue(makeOrder({ pix: pixIn(4) }));
+    renderPage();
+    await screen.findByRole('heading', { name: 'Pague com Pix' });
+    mockGetOrder.mockResolvedValue(
+      makeOrder({ status: 'PAID', pix: null, paidAt: new Date().toISOString() }),
+    );
+    await act(async () => void (await vi.advanceTimersByTimeAsync(5000)));
+    expect(await screen.findByText(/Obrigado pela compra!/)).toBeTruthy();
+    expect(screen.queryByText('O tempo para pagar acabou.')).toBeNull();
+  });
+
+  it('Pix já vencido ao abrir a página (pedido ainda PENDING): mostra que o tempo acabou, sem QR Code', async () => {
+    mockGetOrder.mockResolvedValue(makeOrder({ pix: pixIn(-600) }));
+    renderPage();
+    expect(await screen.findByText('O tempo para pagar acabou.')).toBeTruthy();
+    expect(screen.queryByRole('img', { name: /QR Code/ })).toBeNull();
+    expect(document.body.textContent).not.toContain(BR_CODE);
+  });
+
+  it('a página não menciona o Mercado Pago e não mostra dados do cliente', async () => {
+    mockGetOrder.mockResolvedValue({
+      ...makeOrder({ pix: pixIn(1800) }),
+      customer: { name: 'Ana Souza', email: 'ana@example.com' },
+    } as never);
+    renderPage();
+    await screen.findByRole('heading', { name: 'Pague com Pix' });
+    expect(document.body.textContent).not.toMatch(/mercado/i);
+    expect(document.body.textContent).not.toMatch(/Ana Souza|ana@example\.com/);
+  });
+
+  it('IGNORA query params de provedores na URL: o status e o Pix vêm só da API', async () => {
+    mockGetOrder.mockResolvedValue(makeOrder({ pix: pixIn(1800) }));
+    renderPage(`/pedido/${ORDER_ID}?status=approved&payment_id=1&collection_status=approved`);
+    expect(await screen.findByRole('heading', { name: 'Pague com Pix' })).toBeTruthy();
+    expect(screen.queryByText(/Obrigado pela compra/)).toBeNull();
   });
 });
