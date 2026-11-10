@@ -37,6 +37,9 @@ export interface AppDeps {
   webUrl: string;
   storage: StorageService;
   gateway: PaymentGateway;
+  // Segredo do webhook da AbacatePay (header X-Webhook-Secret); sem ele a rota /webhooks/abacatepay
+  // não é montada.
+  webhookSecret?: string;
   jwtSecret: string;
   cookieSameSite: 'lax' | 'none';
   // Cookie Secure (produção). Com cookieSameSite='none' é sempre Secure.
@@ -56,6 +59,7 @@ export function createApp({
   storage,
   gateway,
   now,
+  webhookSecret,
   jwtSecret,
   cookieSameSite,
   secureCookies = false,
@@ -74,7 +78,13 @@ export function createApp({
       serializers: {
         req: (req: Parameters<typeof stdSerializers.req>[0]) => {
           const { headers, ...rest } = stdSerializers.req(req);
-          const safeHeaders = omitKeys(headers, ['cookie', 'authorization', 'x-signature']);
+          const safeHeaders = omitKeys(headers, [
+            'cookie',
+            'authorization',
+            'x-signature',
+            'x-webhook-secret',
+            'x-webhook-signature',
+          ]);
           return { ...rest, headers: safeHeaders };
         },
         res: (res: Parameters<typeof stdSerializers.res>[0]) => {
@@ -100,6 +110,9 @@ export function createApp({
     next();
   });
   app.use(['/auth', '/admin'], requireCsrfHeader);
+  // Webhook da AbacatePay: o corpo fica CRU (Buffer), porque a assinatura é sobre os bytes recebidos.
+  // Montado ANTES do parser de JSON, que então não toca nesta rota.
+  app.use('/webhooks/abacatepay', express.raw({ type: () => true, limit: '1mb' }));
   app.use(express.json());
   app.use(cookieParser());
 
@@ -143,6 +156,7 @@ export function createApp({
     createPaymentsRouter({
       pool,
       logger,
+      webhookSecret,
       webhookService: new PaymentWebhookService({ pool, gateway, logger }),
       fakeGateway: gateway instanceof FakePaymentGateway ? gateway : undefined,
     }),

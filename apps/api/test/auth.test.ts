@@ -451,13 +451,20 @@ describe('proteção CSRF (D15)', () => {
     expect((await request(app).head('/admin/x')).status).toBe(401);
   });
 
-  it('NÃO se aplica a /orders, /dev nem /products', async () => {
+  it('NÃO se aplica a /orders, /webhooks, /dev nem /products', async () => {
     const orders = await request(app).post('/orders').send({});
     expect(orders.status).toBe(400); // falta Idempotency-Key, não CSRF
     expect(orders.body.error.code).toBe('VALIDATION_ERROR');
     const dev = await request(app).post('/dev/payments/simulate').send({});
     expect(dev.status).toBe(400);
     expect(dev.body.error.code).toBe('VALIDATION_ERROR');
+    const hook = await request(
+      buildApp({ webhookSecret: 'segredo-do-webhook-com-no-minimo-32-caracteres' }),
+    )
+      .post('/webhooks/abacatepay')
+      .send({});
+    expect(hook.status).toBe(401); // recusado pela assinatura, não por CSRF (403)
+    expect(hook.body.error.code).toBe('INVALID_SIGNATURE');
   });
 
   it('preflight OPTIONS responde com os headers de CORS e libera X-Requested-With', async () => {

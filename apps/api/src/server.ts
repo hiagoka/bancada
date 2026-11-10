@@ -64,6 +64,7 @@ const app = createApp({
   secureCookies: env.NODE_ENV === 'production',
   bcryptCost: env.BCRYPT_COST,
   trustProxy: env.TRUST_PROXY,
+  webhookSecret: env.PAYMENT_PROVIDER === 'abacatepay' ? env.ABACATEPAY_WEBHOOK_SECRET : undefined,
 });
 const server = app.listen(env.PORT, (err?: Error) => {
   if (err) {
