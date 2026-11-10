@@ -244,6 +244,20 @@ describe('OrdersListPage: cancelar pedido', () => {
     expect(rows()[1]?.textContent).not.toContain('Cancelar pedido');
   });
 
+  it('a célula de ação sem botão tem texto para leitor de tela ("Sem ação"), não só um traço escondido', async () => {
+    mockList.mockResolvedValue(
+      makeOrdersPage([makeAdminOrder({ status: 'PAID', cancellable: false })]),
+    );
+    renderPage();
+    await screen.findByRole('table');
+    const cell = within(rows()[0] as HTMLElement)
+      .getAllByRole('cell')
+      .at(-1) as HTMLElement;
+    expect(cell.querySelector('.visually-hidden')?.textContent).toBe('Sem ação');
+    expect(cell.querySelector('[aria-hidden="true"]')?.textContent).toBe('—');
+    expect(screen.getByText('Sem ação')).toBeTruthy();
+  });
+
   it('o botão leva o id curto no nome acessível', async () => {
     mockList.mockResolvedValue(makeOrdersPage([cancellable()]));
     renderPage();

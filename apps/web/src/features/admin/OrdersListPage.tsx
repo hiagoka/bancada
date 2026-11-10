@@ -203,7 +203,10 @@ export function OrdersListPage() {
                       Cancelar pedido
                     </Button>
                   ) : (
-                    <span aria-hidden="true">—</span>
+                    <>
+                      <span aria-hidden="true">—</span>
+                      <span className="visually-hidden">Sem ação</span>
+                    </>
                   )}
                 </td>
               </tr>
