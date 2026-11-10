@@ -310,3 +310,28 @@
   font-weight: 700;
   font-size: var(--text-sm);
 }
+
+/* Pedidos: itens, e-mail e paginação. */
+.admin-table__items {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: var(--space-1);
+}
+
+.admin-table__email {
+  font-size: var(--text-xs);
+  overflow-wrap: anywhere;
+}
+
+.admin-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.admin-pagination [aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
