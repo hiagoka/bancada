@@ -194,6 +194,35 @@ describe('AbacatePayGateway.createCheckout', () => {
     await expect(gateway().createCheckout(checkoutRequest())).rejects.toBeInstanceOf(GatewayError);
   });
 
+  it.each([
+    'https://rastreador.example/qr.png',
+    'http://localhost/qr.png',
+    'data:text/html;base64,PGI+eDwvYj4=',
+    'data:image/svg+xml;base64,PHN2Zy8+',
+    'data:image/png;charset=utf-8,abc',
+    'javascript:alert(1)',
+    'iVBORw0KGgo=',
+  ])(
+    'o QR Code que não é "data:image/png;base64,..." (%s) vira GatewayError (vai para um <img src>)',
+    async (image) => {
+      fake.responder = (_req, res) =>
+        sendJson(res, 200, {
+          success: true,
+          data: {
+            id: 'pix_char_1',
+            brCode: FAKE_BR_CODE,
+            brCodeBase64: image,
+            expiresAt: new Date(NOW.getTime() + 1_800_000).toISOString(),
+          },
+        });
+      const error = await gateway()
+        .createCheckout(checkoutRequest())
+        .catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(GatewayError);
+      expect((error as GatewayError).message).not.toContain(image);
+    },
+  );
+
   it('campos novos na resposta não quebram (sem schema rígido)', async () => {
     fake.responder = (_req, res) =>
       sendJson(res, 200, {

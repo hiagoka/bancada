@@ -13,6 +13,7 @@ const DEFAULT_TIMEOUT_MS = 10_000;
 // A AbacatePay recusa expiresIn menor que isso ("expiresIn must be at least 300 seconds").
 export const MIN_EXPIRES_IN_SECONDS = 300;
 const MAX_PROVIDER_MESSAGE = 200;
+const PNG_DATA_URI_PREFIX = 'data:image/png;base64,';
 
 export interface AbacatePayGatewayOptions {
   // Chave de API (abc_dev_... em modo teste, abc_prod_... em produção). O ambiente é definido por
@@ -40,7 +41,9 @@ const createResponseSchema = z.object({
   data: z.object({
     id: z.string().min(1),
     brCode: z.string().min(1),
-    brCodeBase64: z.string().min(1),
+    // Vai para pix_qr_image e depois para um <img src> no web: só aceita imagem PNG embutida (data URI),
+    // nunca uma URL arbitrária (rastreio) nem outro tipo de conteúdo.
+    brCodeBase64: z.string().startsWith(PNG_DATA_URI_PREFIX),
     expiresAt: z.iso.datetime(),
   }),
 });
