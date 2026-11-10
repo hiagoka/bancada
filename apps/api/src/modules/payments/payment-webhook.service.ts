@@ -23,6 +23,13 @@ export interface PaymentWebhookServiceDeps {
   logger: Logger;
 }
 
+interface OrderLockRow {
+  id: string;
+  status: OrderStatus;
+  total_cents: number;
+  payment_id: string | null;
+}
+
 interface LockedOrder {
   id: string;
   status: OrderStatus;
@@ -65,7 +72,7 @@ export class PaymentWebhookService {
       // O pedido é travado (FOR UPDATE) ANTES de inserir o evento. Na ordem inversa o INSERT
       // (FK payment_events.order_id -> orders) segura FOR KEY SHARE na linha do pedido, e duas
       // notificações simultâneas do mesmo pedido entram em deadlock ao pedir o FOR UPDATE.
-      const order = await this.lockOrder(client, payment.orderId);
+      const order = await this.lockOrder(client, payment);
 
       const inserted = await client.query<{ id: string }>(
         `INSERT INTO payment_events (provider, payment_id, status, order_id, amount_cents)
@@ -99,18 +106,24 @@ export class PaymentWebhookService {
     });
   }
 
-  // external_reference vem do provedor: se não for um UUID, o pedido simplesmente não existe.
-  private async lockOrder(db: Db, reference: string): Promise<LockedOrder | null> {
-    if (!orderIdSchema.safeParse(reference).success) return null;
-    const { rows } = await db.query<{
-      id: string;
-      status: OrderStatus;
-      total_cents: number;
-      payment_id: string | null;
-    }>('SELECT id, status, total_cents, payment_id FROM orders WHERE id = $1 FOR UPDATE', [
-      reference,
-    ]);
-    const row = rows[0];
+  // Trava o pedido (FOR UPDATE). Com orderId do provedor (fake e simulate) vale o id, que pode não
+  // ser um UUID (então o pedido não existe); sem ele (AbacatePay) vale checkout_id + provedor.
+  private async lockOrder(db: Db, payment: Payment): Promise<LockedOrder | null> {
+    const columns = 'SELECT id, status, total_cents, payment_id FROM orders';
+    let result;
+    if (payment.orderId !== null) {
+      if (!orderIdSchema.safeParse(payment.orderId).success) return null;
+      result = await db.query<OrderLockRow>(`${columns} WHERE id = $1 FOR UPDATE`, [
+        payment.orderId,
+      ]);
+    } else {
+      result = await db.query<OrderLockRow>(
+        `${columns} WHERE checkout_id = $1 AND payment_provider = $2
+         ORDER BY created_at LIMIT 1 FOR UPDATE`,
+        [payment.id, this.deps.gateway.name],
+      );
+    }
+    const row = result.rows[0];
     return row
       ? {
           id: row.id,
@@ -150,7 +163,12 @@ export class PaymentWebhookService {
       return 'invalid_transition';
     }
 
-    if (target === 'PAID' && payment.amountCents !== order.totalCents) {
+    // Sem valor informado pelo provedor (AbacatePay) não há o que conferir.
+    if (
+      target === 'PAID' &&
+      payment.amountCents !== null &&
+      payment.amountCents !== order.totalCents
+    ) {
       logger.warn(
         {
           orderId,

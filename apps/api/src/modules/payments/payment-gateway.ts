@@ -41,8 +41,12 @@ export interface Payment {
   status: PaymentStatus | 'unknown';
   // Status original do provedor quando não reconhecido (para auditoria em payment_events).
   rawStatus?: string;
-  orderId: string;
-  amountCents: number;
+  // Id do NOSSO pedido, quando o provedor devolve (fake e simulate). null = o provedor não informa
+  // (AbacatePay): o pedido é achado por orders.checkout_id = id do pagamento.
+  orderId: string | null;
+  // Valor pago, quando o provedor informa. null = não informa (AbacatePay): sem conferência de valor,
+  // porque o Pix é fixado por nós ao criar a cobrança.
+  amountCents: number | null;
 }
 
 export interface PaymentGateway {

@@ -425,6 +425,96 @@ describe('duplicados e concorrência', () => {
   });
 });
 
+describe('pagamento sem orderId nem valor (AbacatePay): pedido achado por checkout_id', () => {
+  async function withCheckoutId(order: Created, checkoutId: string, provider = 'fake') {
+    await pool.query(`UPDATE orders SET checkout_id = $2, payment_provider = $3 WHERE id = $1`, [
+      order.orderId,
+      checkoutId,
+      provider,
+    ]);
+  }
+
+  function payByCheckout(id: string, status: PaymentStatus, rawStatus?: string): string {
+    gateway.registerPayment({ id, status, rawStatus, orderId: null, amountCents: null });
+    return id;
+  }
+
+  it('localiza o pedido por checkout_id e aprova, sem checar valor (amountCents nulo)', async () => {
+    const order = await createOrder();
+    await withCheckoutId(order, 'pix_char_1');
+    expect(await outcomeOf(payByCheckout('pix_char_1', 'approved', 'PAID'))).toBe('applied');
+    const row = await orderRow(order.orderId);
+    expect(row.status).toBe('PAID');
+    expect(row.payment_id).toBe('pix_char_1');
+    expect(row.paid_at).not.toBeNull();
+    await expectLedgerConsistent();
+  });
+
+  it('o evento guarda o status BRUTO do provedor, o pedido e amount_cents NULL', async () => {
+    const order = await createOrder();
+    await withCheckoutId(order, 'pix_char_2');
+    await outcomeOf(payByCheckout('pix_char_2', 'approved', 'PAID'));
+    expect(await events()).toEqual([
+      expect.objectContaining({
+        provider: 'fake',
+        payment_id: 'pix_char_2',
+        status: 'PAID',
+        order_id: order.orderId,
+        amount_cents: null,
+        outcome: 'applied',
+      }),
+    ]);
+  });
+
+  it('checkout_id desconhecido: 200 order_not_found, evento com order_id NULL', async () => {
+    await createOrder();
+    expect(await outcomeOf(payByCheckout('pix_char_nenhum', 'approved', 'PAID'))).toBe(
+      'order_not_found',
+    );
+    const [event] = await events();
+    expect(event).toMatchObject({ order_id: null, outcome: 'order_not_found' });
+  });
+
+  it('só acha pedido do MESMO provedor (o mesmo checkout_id em outro provedor não vale)', async () => {
+    const order = await createOrder();
+    await withCheckoutId(order, 'pix_char_3', 'abacatepay');
+    expect(await outcomeOf(payByCheckout('pix_char_3', 'approved', 'PAID'))).toBe(
+      'order_not_found',
+    );
+    expect((await orderRow(order.orderId)).status).toBe('PENDING');
+  });
+
+  it('estorno: PAID -> REFUNDED sem devolver o estoque (D13)', async () => {
+    const order = await createOrder();
+    await withCheckoutId(order, 'pix_char_4');
+    await outcomeOf(payByCheckout('pix_char_4', 'approved', 'PAID'));
+    const stockPaid = await stockOf('mouse');
+    expect(await outcomeOf(payByCheckout('pix_char_4', 'refunded', 'REFUNDED'))).toBe('applied');
+    expect((await orderRow(order.orderId)).status).toBe('REFUNDED');
+    expect(await stockOf('mouse')).toBe(stockPaid);
+    await expectLedgerConsistent();
+  });
+
+  it('o mesmo (pagamento, status) é processado uma só vez, mesmo em paralelo', async () => {
+    const order = await createOrder();
+    await withCheckoutId(order, 'pix_char_5');
+    payByCheckout('pix_char_5', 'approved', 'PAID');
+    const outcomes = await Promise.all(
+      Array.from({ length: 5 }, () => notify('pix_char_5').then((r) => r.body.data.outcome)),
+    );
+    expect(outcomes.filter((o) => o === 'applied')).toHaveLength(1);
+    expect(outcomes.filter((o) => o === 'duplicate')).toHaveLength(4);
+    expect(await events()).toHaveLength(1);
+  });
+
+  it('o valor continua conferido quando o gateway informa (fake e simulate)', async () => {
+    const order = await createOrder();
+    expect(await outcomeOf(pay(order, 'approved', { amountCents: order.totalCents - 1 }))).toBe(
+      'amount_mismatch',
+    );
+  });
+});
+
 describe('falhas e atomicidade', () => {
   it('pagamento inexistente no provedor (404): 200 payment_not_found, warn e NENHUM evento', async () => {
     const lines: string[] = [];
