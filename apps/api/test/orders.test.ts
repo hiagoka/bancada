@@ -567,7 +567,7 @@ describe('GET /orders/:id', () => {
     expect(Object.keys(res.body)).toEqual(['data']);
     expect(publicOrderSchema.strict().safeParse(res.body.data).success).toBe(true);
     expect(Object.keys(res.body.data).sort()).toEqual(
-      ['checkoutUrl', 'createdAt', 'id', 'items', 'paidAt', 'status', 'totalCents'].sort(),
+      ['checkoutUrl', 'createdAt', 'id', 'items', 'paidAt', 'pix', 'status', 'totalCents'].sort(),
     );
     const text = JSON.stringify(res.body);
     expect(text).not.toContain('Ana Souza');

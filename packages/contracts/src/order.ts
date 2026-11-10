@@ -55,20 +55,36 @@ export const orderItemSchema = z.object({
 });
 export type OrderItem = z.infer<typeof orderItemSchema>;
 
+// Cobrança Pix (provedor AbacatePay, D34): o que o cliente precisa para pagar. Só existe enquanto o
+// pedido está PENDING. Nunca contém dados do cliente.
+export const pixChargeSchema = z.object({
+  // Pix copia e cola.
+  brCode: z.string(),
+  // Imagem do QR Code (data URI PNG).
+  qrCodeImage: z.string(),
+  // Depois disso o provedor não aceita mais o pagamento.
+  expiresAt: z.iso.datetime(),
+});
+export type PixCharge = z.infer<typeof pixChargeSchema>;
+
 // Resposta pública (GET /orders/:id): NUNCA contém dados do cliente.
 export const publicOrderSchema = z.object({
   id: z.uuid(),
   status: orderStatusSchema,
   items: z.array(orderItemSchema),
   totalCents: z.number().int().positive(),
+  // Preenchido no gateway fake (página de checkout simulada); null no Pix da AbacatePay.
   checkoutUrl: z.string().nullable(),
+  // Preenchido no Pix da AbacatePay, só enquanto PENDING; null no gateway fake.
+  pix: pixChargeSchema.nullable(),
   paidAt: z.iso.datetime().nullable(),
   createdAt: z.iso.datetime(),
 });
 export type PublicOrder = z.infer<typeof publicOrderSchema>;
 
 // Completo, só para o admin (GET /admin/orders).
-export const orderSchema = publicOrderSchema.extend({
+// Sem o pix: a lista do admin não carrega um QR Code em base64 por pedido.
+export const orderSchema = publicOrderSchema.omit({ pix: true }).extend({
   customer: z.object({
     name: z.string(),
     email: z.string(),

@@ -21,6 +21,7 @@ export function orderResponse(overrides: Record<string, unknown> = {}) {
     ],
     totalCents: 49800,
     checkoutUrl: `${window.location.origin}/checkout-simulado/${ORDER_ID}`,
+    pix: null,
     paidAt: null,
     createdAt: '2026-10-27T12:00:00.000Z',
     ...overrides,

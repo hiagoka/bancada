@@ -23,6 +23,13 @@ const publicOrder = {
   checkoutUrl: 'https://pay.example/abc',
   paidAt: null,
   createdAt: isoDate,
+  pix: null,
+};
+
+const pix = {
+  brCode: '00020101021226950014br.gov.bcb.pix0136abc',
+  qrCodeImage: 'data:image/png;base64,iVBORw0KGgo=',
+  expiresAt: isoDate,
 };
 
 describe('orderStatusSchema', () => {
@@ -148,13 +155,43 @@ describe('publicOrderSchema', () => {
 
   it('não declara nenhum campo do cliente no shape', () => {
     expect(Object.keys(publicOrderSchema.shape).sort()).toEqual(
-      ['checkoutUrl', 'createdAt', 'id', 'items', 'paidAt', 'status', 'totalCents'].sort(),
+      ['checkoutUrl', 'createdAt', 'id', 'items', 'paidAt', 'pix', 'status', 'totalCents'].sort(),
     );
   });
 
   it('rejeita status e total inválidos', () => {
     expect(publicOrderSchema.safeParse({ ...publicOrder, status: 'X' }).success).toBe(false);
     expect(publicOrderSchema.safeParse({ ...publicOrder, totalCents: 0 }).success).toBe(false);
+  });
+
+  it('pix: aceita o objeto completo (copia e cola, imagem do QR Code e validade) ou null', () => {
+    expect(publicOrderSchema.parse({ ...publicOrder, checkoutUrl: null, pix })).toEqual({
+      ...publicOrder,
+      checkoutUrl: null,
+      pix,
+    });
+    expect(publicOrderSchema.parse({ ...publicOrder, pix: null }).pix).toBeNull();
+  });
+
+  it('pix: é obrigatório (objeto ou null) e não pode vir pela metade', () => {
+    expect(publicOrderSchema.safeParse(omit(publicOrder, 'pix')).success).toBe(false);
+    expect(publicOrderSchema.safeParse({ ...publicOrder, pix: {} }).success).toBe(false);
+    expect(publicOrderSchema.safeParse({ ...publicOrder, pix: omit(pix, 'brCode') }).success).toBe(
+      false,
+    );
+    expect(
+      publicOrderSchema.safeParse({ ...publicOrder, pix: { ...pix, expiresAt: 'amanhã' } }).success,
+    ).toBe(false);
+    expect(publicOrderSchema.safeParse({ ...publicOrder, pix: 'texto' }).success).toBe(false);
+  });
+
+  it('pix não traz nenhum dado do cliente', () => {
+    expect(Object.keys(pix).sort()).toEqual(['brCode', 'expiresAt', 'qrCodeImage']);
+    const parsed = publicOrderSchema.parse({
+      ...publicOrder,
+      pix: { ...pix, customer: { name: 'Ana', email: 'ana@example.com' } },
+    });
+    expect(JSON.stringify(parsed)).not.toContain('ana@example.com');
   });
 
   it('rejeita checkoutUrl ausente (deve ser string ou null)', () => {
@@ -164,13 +201,18 @@ describe('publicOrderSchema', () => {
 
 describe('orderSchema', () => {
   const full = {
-    ...publicOrder,
+    ...omit(publicOrder, 'pix'),
     customer: { name: 'Ana', email: 'ana@example.com' },
     cancellable: false,
   };
 
   it('aceita pedido completo com cancellable', () => {
     expect(orderSchema.parse(full)).toEqual(full);
+  });
+
+  it('não carrega o pix (o QR Code em base64 inflaria a lista do admin)', () => {
+    expect(Object.keys(orderSchema.shape)).not.toContain('pix');
+    expect(orderSchema.parse({ ...full, pix }).pix).toBeUndefined();
   });
 
   it('exige customer e cancellable booleano', () => {
@@ -202,7 +244,7 @@ describe('adminOrdersQuerySchema', () => {
 
 describe('adminOrdersPageSchema', () => {
   const full = {
-    ...publicOrder,
+    ...omit(publicOrder, 'pix'),
     customer: { name: 'Ana', email: 'ana@example.com' },
     cancellable: true,
   };

@@ -11,6 +11,7 @@ const publicOrder = {
   items: [{ productId, productName: 'Mouse', unitPriceCents: 24900, quantity: 2 }],
   totalCents: 49800,
   checkoutUrl: 'http://localhost:5173/checkout-simulado/' + orderId,
+  pix: null,
   paidAt: null,
   createdAt: '2026-10-27T12:00:00.000Z',
 };

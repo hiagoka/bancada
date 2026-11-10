@@ -15,7 +15,7 @@ const toBase = (order: OrderWithItems) => ({
 
 // Resposta pública: SEM dados do cliente. checkoutUrl só enquanto o pedido está PENDING.
 export function toPublicOrder(order: OrderWithItems): PublicOrder {
-  const parsed = publicOrderSchema.safeParse(toBase(order));
+  const parsed = publicOrderSchema.safeParse({ ...toBase(order), pix: null });
   // Dado do banco fora do contrato é bug nosso (500), não erro de validação do cliente.
   if (!parsed.success) throw new Error('Pedido fora do contrato público', { cause: parsed.error });
   return parsed.data;

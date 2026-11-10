@@ -22,6 +22,7 @@ export function makeOrder(overrides: Partial<PublicOrder> = {}): PublicOrder {
     ],
     totalCents: 54700,
     checkoutUrl: null,
+    pix: null,
     paidAt: null,
     createdAt: '2026-10-27T15:30:00.000Z',
     ...overrides,
