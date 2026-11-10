@@ -419,6 +419,50 @@ describe('sucesso e redirecionamento', () => {
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['products'] });
   });
 
+  it('sem checkoutUrl e com Pix: vai para /pedido/:id e anuncia "Pedido criado. Abra o Pix para pagar."', async () => {
+    cartWith([mouse(), 2]);
+    mockApi({
+      orders: [
+        created(
+          orderResponse({
+            checkoutUrl: null,
+            pix: {
+              brCode: '00020101021226950014br.gov.bcb.pix0136teste',
+              qrCodeImage: 'data:image/png;base64,iVBORw0KGgo=',
+              expiresAt: '2030-01-01T12:30:00.000Z',
+            },
+          }),
+        ),
+      ],
+    });
+    renderCheckout();
+    await fill();
+    await submit();
+    await screen.findByText('PEDIDO');
+    expect(useAnnouncer.getState().message).toBe('Pedido criado. Abra o Pix para pagar.');
+    expect(useAnnouncer.getState().message).not.toContain('Criando');
+  });
+
+  it('modo fake: anuncia "Pedido criado. Siga para o pagamento simulado."', async () => {
+    cartWith([mouse(), 2]);
+    mockApi({ orders: [created()] });
+    renderCheckout();
+    await fill();
+    await submit();
+    await screen.findByText('SIMULADO');
+    expect(useAnnouncer.getState().message).toBe('Pedido criado. Siga para o pagamento simulado.');
+  });
+
+  it('o "Criando seu pedido…" não sobra na região aria-live depois do redirecionamento', async () => {
+    cartWith([mouse(), 2]);
+    mockApi({ orders: [created()] });
+    renderCheckout();
+    await fill();
+    await submit();
+    await screen.findByText('SIMULADO');
+    await waitFor(() => expect(useAnnouncer.getState().message).toBe(''), { timeout: 3500 });
+  });
+
   it('URL externa (checkout externo): chama o redirecionamento externo e limpa o carrinho', async () => {
     cartWith([mouse(), 2]);
     const external = vi.fn();

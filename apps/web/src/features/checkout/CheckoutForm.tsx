@@ -65,8 +65,19 @@ export function CheckoutForm({ redirectExternal = defaultRedirectExternal, now }
 
   const redirectAfterSuccess = (order: PublicOrder): void => {
     const target = resolveRedirect(order.checkoutUrl, order.id, window.location.origin);
-    if (target.kind === 'internal') navigate(target.to);
-    else redirectExternal(target.url);
+    if (target.kind === 'internal') {
+      // Troca o "Criando seu pedido…" por um aviso que faz sentido na página de destino.
+      announce(
+        target.to.startsWith('/checkout-simulado')
+          ? 'Pedido criado. Siga para o pagamento simulado.'
+          : order.pix
+            ? 'Pedido criado. Abra o Pix para pagar.'
+            : 'Pedido criado.',
+      );
+      navigate(target.to);
+    } else {
+      redirectExternal(target.url);
+    }
   };
 
   const submitValid = async (customer: Customer): Promise<void> => {
