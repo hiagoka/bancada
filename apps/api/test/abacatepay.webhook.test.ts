@@ -702,6 +702,32 @@ describe('logs e privacidade', () => {
     expect(JSON.stringify(res.body)).not.toContain(API_KEY);
   });
 
+  it('o log da requisição NÃO grava a query de /webhooks/* (segredo na URL, estilo da v1)', async () => {
+    const { lines, logger } = capture();
+    const logging = buildApp(logger);
+    const body = eventBody('transparent.completed', 'pix_char_x');
+    const res = await request(logging)
+      .post('/webhooks/abacatepay')
+      .query({ webhookSecret: 'SEGREDO-NA-URL-QUE-NAO-PODE-APARECER', outro: 'valor-na-query' })
+      .set('Content-Type', 'application/json')
+      .set('X-Webhook-Signature', abacatePaySignature(body))
+      .send(body);
+    expect(res.status).toBe(401);
+    const out = lines.join('\n');
+    expect(out).not.toContain('SEGREDO-NA-URL-QUE-NAO-PODE-APARECER');
+    expect(out).not.toContain('valor-na-query');
+    expect(out).not.toContain('webhookSecret');
+    const logged = lines.map((l) => JSON.parse(l)).find((l) => l.req?.url?.startsWith('/webhooks'));
+    expect(logged.req.url).toBe('/webhooks/abacatepay');
+    expect(logged.req).not.toHaveProperty('query');
+  });
+
+  it('fora de /webhooks a query continua no log (só o webhook é tratado assim)', async () => {
+    const { lines, logger } = capture();
+    await request(buildApp(logger)).get('/products').query({ q: 'busca-visivel' });
+    expect(lines.join('\n')).toContain('/products?q=busca-visivel');
+  });
+
   it('assinatura inválida fica registrada em nível warn, sem o conteúdo da requisição', async () => {
     const { lines, logger } = capture();
     const logging = buildApp(logger);

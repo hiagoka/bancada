@@ -85,6 +85,13 @@ export function createApp({
             'x-webhook-secret',
             'x-webhook-signature',
           ]);
+          // /webhooks/*: sem a query no log (um segredo na URL, como na v1 da AbacatePay, ficaria
+          // gravado mesmo com 401). O segredo vai só no header X-Webhook-Secret.
+          if (typeof rest.url === 'string' && rest.url.startsWith('/webhooks/')) {
+            const withoutQuery: Record<string, unknown> = { ...rest };
+            delete withoutQuery.query;
+            return { ...withoutQuery, url: rest.url.split('?')[0], headers: safeHeaders };
+          }
           return { ...rest, headers: safeHeaders };
         },
         res: (res: Parameters<typeof stdSerializers.res>[0]) => {
