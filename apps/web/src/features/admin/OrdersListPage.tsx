@@ -23,6 +23,8 @@ export function OrdersListPage() {
   const cancel = useCancelOrder();
 
   const [target, setTarget] = useState<Order | null>(null);
+  // O botão que abriu o diálogo: o foco volta a ele (o clique nem sempre o foca, ex.: Safari).
+  const [opener, setOpener] = useState<HTMLElement | null>(null);
   const [notice, setNotice] = useState('');
   const [failure, setFailure] = useState<{ message: string; attempt: number } | null>(null);
   const failureCount = useRef(0);
@@ -32,6 +34,13 @@ export function OrdersListPage() {
   useEffect(() => {
     if (notice) noticeRef.current?.focus(); // o botão clicado some da lista: o foco não se perde
   }, [notice]);
+
+  useEffect(() => {
+    // Falha que deixa o pedido na lista (rede, 5xx): o foco volta ao botão, e o alerta segue sendo
+    // anunciado (role=alert). Se o botão sumiu (409/404 recarregam a lista), o foco fica no alerta.
+    if (failure && opener?.isConnected) opener.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- só reage a uma NOVA falha
+  }, [failure]);
 
   const totalPages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
 
@@ -181,7 +190,10 @@ export function OrdersListPage() {
                     <Button
                       variant="secondary"
                       aria-label={`Cancelar pedido #${shortId(order.id)}`}
-                      onClick={() => setTarget(order)}
+                      onClick={(event) => {
+                        setOpener(event.currentTarget);
+                        setTarget(order);
+                      }}
                     >
                       Cancelar pedido
                     </Button>
@@ -238,6 +250,7 @@ export function OrdersListPage() {
         confirmLabel="Cancelar pedido"
         cancelLabel="Voltar"
         busy={cancel.isPending}
+        opener={opener}
         onConfirm={() => void confirmCancel()}
         onCancel={() => setTarget(null)}
       />

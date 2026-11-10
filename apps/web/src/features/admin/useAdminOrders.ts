@@ -30,9 +30,10 @@ export function useCancelOrder() {
         client.invalidateQueries({ queryKey: ['admin', 'product'] }),
         client.invalidateQueries({ queryKey: PRODUCTS_QUERY_KEY }),
       ]),
+    // Devolve a promessa: a lista já está atualizada quando o chamador trata o erro (e decide o foco).
     onError: (error) => {
       if (error instanceof ApiError && (error.status === 404 || error.status === 409)) {
-        void client.invalidateQueries({ queryKey: ADMIN_ORDERS_KEY });
+        return client.invalidateQueries({ queryKey: ADMIN_ORDERS_KEY });
       }
     },
   });

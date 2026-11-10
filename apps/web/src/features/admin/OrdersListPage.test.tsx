@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -255,6 +255,46 @@ describe('OrdersListPage: cancelar pedido', () => {
     expect(mockCancel).not.toHaveBeenCalled();
   });
 
+  it('Voltar devolve o foco ao botão que abriu, mesmo quando o clique não o focou (Safari/Firefox)', async () => {
+    mockList.mockResolvedValue(makeOrdersPage([cancellable()]));
+    renderPage();
+    await screen.findByRole('table');
+    const opener = screen.getByRole('button', { name: 'Cancelar pedido #3F2504E0' });
+    fireEvent.click(opener); // sem foco, como no Safari
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Voltar' }));
+    expect(document.activeElement).toBe(opener);
+  });
+
+  it('erro que mantém o pedido na lista (rede): o foco volta ao botão que abriu, e o alerta continua anunciado', async () => {
+    mockList.mockResolvedValue(makeOrdersPage([cancellable()]));
+    mockCancel.mockRejectedValue(new NetworkError());
+    renderPage();
+    await screen.findByRole('table');
+    const opener = screen.getByRole('button', { name: 'Cancelar pedido #3F2504E0' });
+    fireEvent.click(opener);
+    await user.click(
+      within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancelar pedido' }),
+    );
+    expect((await screen.findByRole('alert')).textContent).toContain('A API está fora do ar.');
+    await waitFor(() => expect(document.activeElement).toBe(opener));
+  });
+
+  it('sucesso com o pedido saindo da lista: o foco vai ao aviso de resultado (não se perde no body)', async () => {
+    mockList.mockResolvedValue(makeOrdersPage([cancellable()]));
+    mockCancel.mockResolvedValue(makeAdminOrder({ status: 'CANCELLED', cancellable: false }));
+    renderPage();
+    await screen.findByRole('table');
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar pedido #3F2504E0' }));
+    mockList.mockResolvedValue(
+      makeOrdersPage([makeAdminOrder({ status: 'CANCELLED', cancellable: false })]),
+    );
+    await user.click(
+      within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancelar pedido' }),
+    );
+    const notice = await screen.findByText(/cancelado\. O estoque dos itens voltou/);
+    await waitFor(() => expect(document.activeElement).toBe(notice));
+  });
+
   it('Esc fecha o diálogo sem cancelar e o foco volta ao botão', async () => {
     mockList.mockResolvedValue(makeOrdersPage([cancellable()]));
     renderPage();
@@ -339,7 +379,7 @@ describe('OrdersListPage: cancelar pedido', () => {
     );
     const alert = text.closest('[role=alert]');
     expect(alert).toBeTruthy();
-    await waitFor(() => expect(document.activeElement).toBe(alert));
+    await waitFor(() => expect(document.activeElement).toBe(alert)); // o botão sumiu da lista
     expect(screen.queryByRole('dialog')).toBeNull();
     await waitFor(() => expect(mockList).toHaveBeenCalled()); // recarregou
     await waitFor(() => expect(cancelButtons()).toHaveLength(0));
