@@ -1,0 +1,100 @@
+/* Pagamento por Pix na página do pedido (D34). Tokens da D25: sem raio, sem sombra, tape só como
+   preenchimento (o botão primário). O QR Code fica num quadro CLARO e liso: leitor de câmera não
+   perdoa ruído, sombra nem transparência por cima. */
+.pix {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.pix__title {
+  font-size: var(--text-xl);
+}
+
+.pix__steps {
+  margin: 0;
+  padding-left: var(--space-6);
+  display: grid;
+  gap: var(--space-1);
+}
+
+.pix__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-6);
+  align-items: start;
+}
+
+@media (min-width: 48rem) {
+  .pix__body {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+}
+
+.pix__qr {
+  justify-self: start;
+  padding: var(--space-4);
+  border: var(--border) solid var(--ink);
+  background: #fff;
+  line-height: 0;
+}
+
+.pix__qr img {
+  display: block;
+  width: min(240px, 100%);
+  height: auto;
+  aspect-ratio: 1 / 1;
+  image-rendering: pixelated;
+}
+
+.pix__copy {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.pix__label {
+  font-family: var(--font-display);
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: var(--text-sm);
+}
+
+.pix__code {
+  width: 100%;
+  min-height: 2.75rem;
+  padding: var(--space-2) var(--space-3);
+  border: var(--border) solid var(--ink);
+  border-radius: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+}
+
+.pix__copy .btn {
+  justify-self: start;
+}
+
+.pix__feedback {
+  min-height: 1.4em;
+  font-weight: 700;
+  font-size: var(--text-sm);
+}
+
+.pix__countdown {
+  font-weight: 700;
+}
+
+.pix__time {
+  font-size: var(--text-lg);
+}
+
+.pix__hint {
+  font-size: var(--text-sm);
+}
+
+.pix__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
