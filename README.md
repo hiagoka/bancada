@@ -359,3 +359,39 @@ O que eles cobrem (entre outras coisas): total com o preço do banco, replay e c
 
 - `CI` (`.github/workflows/ci.yml`): a cada push na `main` e em pull request, com um PostgreSQL como _service_: `npm ci`, build do contracts, lint, `format:check`, typecheck, sobe o MinIO pelo `docker-compose.yml` (o que também prova o `minio` e o `minio-init`), `npm test` com `REQUIRE_MINIO=true` e build.
 - `Docker` (`.github/workflows/docker.yml`, D33): sobe a stack inteira com `docker compose up --build` e confere com `curl` a API e o seed (inclusive que um preço editado sobrevive ao restart), a loja (fallback de SPA, cache e gzip), o admin (criar admin pelo script, login, cookie `httpOnly` e CORS) e o upload de imagem direto ao MinIO. Roda no push na `main`, em pull requests que mexem em `apps/api`, `apps/web`, `packages` ou na infra de Docker, e sob demanda (aba Actions, "Run workflow").
+
+## Limitações conhecidas e próximos passos
+
+Tudo abaixo é verdade no código de hoje e está registrado no [ARCHITECTURE.md](ARCHITECTURE.md).
+
+**Pedidos e pagamento**
+
+- **Expiração automática de pedidos por job.** Hoje um pedido abandonado segue `PENDING` e **segura o estoque** até o admin cancelá-lo (só é possível depois de 30 minutos). A Preference do Mercado Pago já expira sozinha em 30 minutos. Um job que cancele os pedidos vencidos devolveria o estoque sem intervenção (D14, D28g).
+- **Cobrança em dobro.** Um segundo pagamento aprovado (com outro `payment_id`) num pedido já pago vira `no_change` com um alerta em log; não há estorno automático (D20d).
+- **Teste com o Mercado Pago real** (T22) e **deploy** (T23) ainda não foram feitos.
+
+**Estoque e admin**
+
+- **Idempotência no ajuste de estoque do admin.** O endpoint não tem chave de idempotência: numa falha de rede, repetir às cegas poderia ajustar duas vezes. A tela manda conferir o histórico antes de repetir (D32a).
+- **Autoria só no estoque.** Só o estoque tem livro-razão; edições de preço e de `active` não registram quem as fez (D22g).
+- **Janela de 30 minutos.** `created_at` vem do relógio do banco e o "agora" do Node; uma diferença de segundos entre eles desloca a janela do cancelamento (D22e).
+
+**Imagens**
+
+- **Limpeza de imagens órfãs no S3.** Trocar ou remover a imagem de um produto, ou enviar uma imagem e não salvar, deixa o arquivo antigo no bucket (D16, D31d).
+- **Tamanho mínimo de upload.** A política do presigned POST aceita de 0 a 2 MB: o servidor aceita um arquivo de 0 byte (o web já o recusa) e não valida o conteúdo real, só o tipo declarado e o tamanho (D23b).
+- **Existência do objeto.** Ao salvar o produto a API não confere se o objeto de fato está no bucket (D23g).
+- **Credenciais fixas do S3** são obrigatórias em produção, o que impede usar uma IAM role (D23f).
+
+**Autenticação e infraestrutura**
+
+- **Revogação de JWT no logout.** O JWT é _stateless_: o logout limpa o cookie, mas um token copiado vale até expirar (8 h) (D21d).
+- **`TRUST_PROXY=1` atrás de ALB ou App Runner.** O padrão é `false`; sem configurar, todos os clientes compartilham o IP do proxy no rate limit do login (D21c).
+- **Senha do `admin:create` por variável de ambiente.** `--password` na linha de comando fica no histórico do shell (D21e).
+- **CSP do nginx.** A Content-Security-Policy da imagem do web está em modo `Report-Only` e sem endpoint de relatório; promovê-la a `Content-Security-Policy` (enforce) fica para depois (D33f).
+- **CORS sem `maxAge`.** O `X-Requested-With` em toda requisição força um preflight a cada chamada; avaliar `maxAge` na API (D26f).
+
+**Antes de tornar o repositório público**
+
+- **Fontes da Fontshare.** Clash Grotesk e General Sans estão versionadas em `apps/web/src/assets/fonts` (self-host). A licença (FFL) permite uso no próprio site, mas **proíbe redistribuir os arquivos**, e um repositório público os distribui. Antes disso, tirar os `.woff2` do repositório (e do histórico) e baixá-los no build, ou trocar por fontes com licença livre (D27f, `apps/web/src/assets/fonts/README.md`).
+- **Credencial de dev no `.env.example`.** O `apps/api/.env.example` guarda a senha do admin de desenvolvimento (`ADMIN_DEV_PASSWORD`); num repositório público, trocar por um valor fictício (D30g).
