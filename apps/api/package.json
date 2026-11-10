@@ -15,6 +15,7 @@
     "postbuild": "node scripts/verify-build.mjs",
     "migrate": "tsx --env-file-if-exists=.env src/db/migrate.cli.ts",
     "seed": "tsx --env-file-if-exists=.env src/db/seed.cli.ts",
+    "seed:prod": "node --env-file-if-exists=.env dist/db/seed.cli.js",
     "migrate:prod": "node --env-file-if-exists=.env dist/db/migrate.cli.js",
     "admin:create": "tsx --env-file-if-exists=.env src/scripts/create-admin.ts",
     "admin:create:prod": "node --env-file-if-exists=.env dist/scripts/create-admin.js"

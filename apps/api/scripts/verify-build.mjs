@@ -11,3 +11,7 @@ for (const file of source) {
   assert.ok(existsSync(resolve(dist, file)), `dist/db/migrations/${file} não foi copiado`);
 }
 assert.ok(existsSync(resolve(root, 'dist/db/migrate.cli.js')), 'dist/db/migrate.cli.js não existe');
+// A imagem Docker roda estes pontos de entrada compilados (docker-entrypoint.sh e admin:create).
+for (const file of ['dist/server.js', 'dist/db/seed.cli.js', 'dist/scripts/create-admin.js']) {
+  assert.ok(existsSync(resolve(root, file)), `${file} não existe`);
+}
