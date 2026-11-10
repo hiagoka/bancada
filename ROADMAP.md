@@ -31,7 +31,7 @@ Uma tarefa por vez (api e web podem andar em paralelo quando não dependem uma d
 ## Fase 5 · Administração (web)
 - [x] **T17** [web] Login, RequireAdmin e AdminLayout. Aceite: sem login redireciona; depois do login volta à página pedida; "Sair" limpa a sessão.
 - [x] **T18** [web] Lista, criação e edição de produtos com upload de imagem. Aceite: produto criado no admin aparece na loja com a imagem.
-- [ ] **T19** [web] Painel de estoque (ajuste + histórico) e lista de pedidos com botão "Cancelar pedido" (só quando cancellable). Aceite: ajuste reflete na loja; pedido pago aparece com status correto; cancelar pedido abandonado devolve o estoque na loja.
+- [x] **T19** [web] Painel de estoque (ajuste + histórico) e lista de pedidos com botão "Cancelar pedido" (só quando cancellable). Aceite: ajuste reflete na loja; pedido pago aparece com status correto; cancelar pedido abandonado devolve o estoque na loja.
 
 ## Fase 6 · Entrega
 - [ ] **T20** [api] Docker completo: Dockerfiles da API e do web, compose com db, minio, minio-init, api e web. Aceite: docker compose up --build deixa loja e admin funcionando.
