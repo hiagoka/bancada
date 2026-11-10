@@ -11,6 +11,8 @@ export interface S3StorageDeps {
   bucket: string;
   // Base pública dos objetos (S3_PUBLIC_URL), sem barra final.
   publicUrl: string;
+  // Cliente só para ASSINAR o presigned POST (offline): define o host do uploadUrl. Padrão: client.
+  presignClient?: S3Client;
   // Validade da política do presigned POST (padrão 300 s; testes usam valores curtos).
   expiresSeconds?: number;
 }
@@ -27,7 +29,7 @@ export class S3StorageService implements StorageService {
   async createUpload(contentType: string): Promise<UploadResponse> {
     const key = newUploadKey(contentType);
     // Content-Type, key e bucket entram na política como condições de igualdade exata.
-    const { url, fields } = await createPresignedPost(this.deps.client, {
+    const { url, fields } = await createPresignedPost(this.deps.presignClient ?? this.deps.client, {
       Bucket: this.deps.bucket,
       Key: key,
       Conditions: [['content-length-range', 0, MAX_UPLOAD_BYTES]],
@@ -50,15 +52,33 @@ export interface S3Config {
   publicUrl: string;
   // Vazio na AWS; http://localhost:9000 no MinIO.
   endpoint?: string;
+  // Endpoint que o navegador enxerga (uploadUrl do presigned POST), se diferente de `endpoint`.
+  presignEndpoint?: string;
   forcePathStyle: boolean;
 }
 
 export function createS3Storage(config: S3Config): S3StorageService {
+  const credentials = { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey };
   const client = new S3Client({
     region: config.region,
     endpoint: config.endpoint,
     forcePathStyle: config.forcePathStyle,
-    credentials: { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey },
+    credentials,
   });
-  return new S3StorageService({ client, bucket: config.bucket, publicUrl: config.publicUrl });
+  // Assinar o presigned POST não faz chamada de rede: o endpoint só decide o host do uploadUrl.
+  const presignClient =
+    config.presignEndpoint === undefined
+      ? undefined
+      : new S3Client({
+          region: config.region,
+          endpoint: config.presignEndpoint,
+          forcePathStyle: config.forcePathStyle,
+          credentials,
+        });
+  return new S3StorageService({
+    client,
+    presignClient,
+    bucket: config.bucket,
+    publicUrl: config.publicUrl,
+  });
 }

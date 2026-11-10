@@ -56,6 +56,10 @@ const envObject = z.object({
   S3_ACCESS_KEY_ID: optionalString,
   S3_SECRET_ACCESS_KEY: optionalString,
   S3_PUBLIC_URL: z.url({ error: 'deve ser uma URL válida' }).optional(),
+  // Endpoint do S3 como o NAVEGADOR o enxerga, só para o uploadUrl do presigned POST. Só é preciso
+  // quando a API fala com o S3 por outro endereço (Docker: API em http://minio:9000, navegador em
+  // http://localhost:9000). Ausente: usa S3_ENDPOINT.
+  S3_PUBLIC_ENDPOINT: z.url({ error: 'deve ser uma URL válida' }).optional(),
   S3_FORCE_PATH_STYLE: z
     .enum(['true', 'false'], { error: 'deve ser "true" ou "false"' })
     .transform((v) => v === 'true')

@@ -41,6 +41,7 @@ const storage = createS3Storage({
   secretAccessKey: env.S3_SECRET_ACCESS_KEY,
   publicUrl: env.S3_PUBLIC_URL,
   endpoint: env.S3_ENDPOINT,
+  presignEndpoint: env.S3_PUBLIC_ENDPOINT,
   forcePathStyle: env.S3_FORCE_PATH_STYLE,
 });
 if (env.PAYMENT_PROVIDER === 'fake' && env.NODE_ENV === 'production') {

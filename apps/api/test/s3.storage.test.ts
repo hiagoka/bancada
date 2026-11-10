@@ -1,6 +1,6 @@
 import { S3Client } from '@aws-sdk/client-s3';
 import { adminProductInputSchema } from '@bancada/contracts';
-import { S3StorageService } from '../src/modules/storage/s3.storage.js';
+import { S3StorageService, createS3Storage } from '../src/modules/storage/s3.storage.js';
 
 // Offline: o presigned POST é calculado localmente (nenhuma chamada de rede).
 const SECRET = 'segredo-super-secreto-do-s3';
@@ -134,6 +134,43 @@ describe('S3StorageService.publicUrl', () => {
     );
     expect(build({ publicUrl: 'https://cdn.example.com///' }).publicUrl('products/a.png')).toBe(
       'https://cdn.example.com/products/a.png',
+    );
+  });
+});
+
+describe('createS3Storage: endpoint que o NAVEGADOR enxerga (S3_PUBLIC_ENDPOINT)', () => {
+  const config = {
+    region: 'us-east-1',
+    bucket: 'bancada',
+    accessKeyId: 'minioadmin',
+    secretAccessKey: 'minioadmin',
+    publicUrl: 'http://localhost:9000/bancada',
+    forcePathStyle: true,
+  };
+
+  it('sem presignEndpoint, o uploadUrl usa o endpoint da API', async () => {
+    const storage = createS3Storage({ ...config, endpoint: 'http://minio:9000' });
+    expect((await storage.createUpload('image/png')).uploadUrl).toBe('http://minio:9000/bancada');
+  });
+
+  it('com presignEndpoint, o uploadUrl usa o endereço do navegador (no Docker a API fala com minio:9000, o navegador com localhost:9000)', async () => {
+    const storage = createS3Storage({
+      ...config,
+      endpoint: 'http://minio:9000',
+      presignEndpoint: 'http://localhost:9000',
+    });
+    const upload = await storage.createUpload('image/png');
+    expect(upload.uploadUrl).toBe('http://localhost:9000/bancada');
+    expect(upload.fields.key).toBe(upload.key);
+    expect(upload.fields['Content-Type']).toBe('image/png');
+    expect(upload.fields.Policy).toBeTruthy();
+    expect(upload.fields['X-Amz-Signature']).toBeTruthy();
+  });
+
+  it('na AWS (sem endpoint) o presignEndpoint também é respeitado se informado', async () => {
+    const storage = createS3Storage({ ...config, presignEndpoint: 'http://localhost:9000' });
+    expect((await storage.createUpload('image/webp')).uploadUrl).toBe(
+      'http://localhost:9000/bancada',
     );
   });
 });

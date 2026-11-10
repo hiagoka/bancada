@@ -43,6 +43,40 @@ describe('parseEnv', () => {
     });
   });
 
+  describe('S3_PUBLIC_ENDPOINT (endpoint do S3 visto pelo navegador, opcional)', () => {
+    it('ausente: fica ausente (não herda padrão)', () => {
+      expect(parseEnv(validEnv).S3_PUBLIC_ENDPOINT).toBeUndefined();
+    });
+
+    it('informada: vira a URL; vazia conta como ausente', () => {
+      expect(
+        parseEnv({ ...validEnv, S3_PUBLIC_ENDPOINT: 'http://localhost:9000' }).S3_PUBLIC_ENDPOINT,
+      ).toBe('http://localhost:9000');
+      expect(parseEnv({ ...validEnv, S3_PUBLIC_ENDPOINT: '' }).S3_PUBLIC_ENDPOINT).toBeUndefined();
+    });
+
+    it('precisa ser uma URL', () => {
+      expect(() => parseEnv({ ...validEnv, S3_PUBLIC_ENDPOINT: 'nao-url' })).toThrow(
+        /S3_PUBLIC_ENDPOINT/,
+      );
+    });
+
+    it('não é exigida em produção', () => {
+      const env = parseEnv({
+        ...validEnv,
+        NODE_ENV: 'production',
+        ALLOW_FAKE_PAYMENTS: 'true',
+        S3_REGION: 'sa-east-1',
+        S3_BUCKET: 'b',
+        S3_ACCESS_KEY_ID: 'k',
+        S3_SECRET_ACCESS_KEY: 's',
+        S3_PUBLIC_URL: 'https://cdn.example.com',
+        S3_FORCE_PATH_STYLE: 'false',
+      });
+      expect(env.S3_PUBLIC_ENDPOINT).toBeUndefined();
+    });
+  });
+
   it('valores S3 informados vencem os padrões', () => {
     const env = parseEnv({
       ...validEnv,
