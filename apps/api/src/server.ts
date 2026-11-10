@@ -1,7 +1,8 @@
 import pino from 'pino';
 import { createApp } from './app.js';
-import { EnvError, loadEnv, type Env } from './config/env.js';
+import { EnvError, loadEnv, paymentConfigWarnings, type Env } from './config/env.js';
 import { createPool } from './db/pool.js';
+import { AbacatePayGateway } from './modules/payments/abacatepay.gateway.js';
 import { FakePaymentGateway } from './modules/payments/fake.gateway.js';
 import { createS3Storage } from './modules/storage/s3.storage.js';
 
@@ -24,7 +25,10 @@ const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' });
 const pool = createPool(env.DATABASE_URL);
 pool.on('error', (err) => logger.error({ err }, 'Erro em conexão ociosa do pool'));
 
-const gateway = new FakePaymentGateway({ webUrl: env.WEB_URL });
+const gateway =
+  env.PAYMENT_PROVIDER === 'abacatepay'
+    ? new AbacatePayGateway({ apiKey: env.ABACATEPAY_API_KEY!, apiUrl: env.ABACATEPAY_API_URL })
+    : new FakePaymentGateway({ webUrl: env.WEB_URL });
 
 const storage = createS3Storage({
   region: env.S3_REGION,
@@ -36,6 +40,7 @@ const storage = createS3Storage({
   presignEndpoint: env.S3_PUBLIC_ENDPOINT,
   forcePathStyle: env.S3_FORCE_PATH_STYLE,
 });
+for (const warning of paymentConfigWarnings(env)) logger.warn(warning);
 if (env.PAYMENT_PROVIDER === 'fake' && env.NODE_ENV === 'production') {
   logger.warn(
     'PAYMENT_PROVIDER=fake em produção: pagamentos simulados e /dev/payments/simulate expostos',

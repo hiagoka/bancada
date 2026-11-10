@@ -45,7 +45,16 @@ const envObject = z.object({
     .enum(['true', 'false'], { error: 'deve ser "true" ou "false"' })
     .transform((v) => v === 'true')
     .optional(),
-  PAYMENT_PROVIDER: z.enum(['fake'], { error: 'deve ser "fake"' }).default('fake'),
+  PAYMENT_PROVIDER: z
+    .enum(['fake', 'abacatepay'], { error: 'deve ser "fake" ou "abacatepay"' })
+    .default('fake'),
+  // AbacatePay (D34). O ambiente (teste ou produção) é definido pela chave: abc_dev_ ou abc_prod_.
+  ABACATEPAY_API_KEY: optionalString,
+  // Segredo que a AbacatePay devolve no header X-Webhook-Secret; no mínimo 32 caracteres aleatórios.
+  ABACATEPAY_WEBHOOK_SECRET: optionalString,
+  ABACATEPAY_API_URL: z
+    .url({ error: 'deve ser uma URL válida' })
+    .default('https://api.abacatepay.com/v2'),
   S3_ENDPOINT: z.url({ error: 'deve ser uma URL válida' }).optional(),
   S3_REGION: optionalString,
   S3_BUCKET: optionalString,
@@ -100,6 +109,24 @@ const envSchema = envObject
           'Use um provedor real ou, se for de propósito, defina ALLOW_FAKE_PAYMENTS=true',
       });
     }
+    if (env.PAYMENT_PROVIDER === 'abacatepay') {
+      for (const name of ['ABACATEPAY_API_KEY', 'ABACATEPAY_WEBHOOK_SECRET'] as const) {
+        if (!env[name]) {
+          ctx.addIssue({
+            code: 'custom',
+            path: [name],
+            message: 'é obrigatória quando PAYMENT_PROVIDER=abacatepay',
+          });
+        }
+      }
+      if (env.ABACATEPAY_WEBHOOK_SECRET && env.ABACATEPAY_WEBHOOK_SECRET.length < 32) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['ABACATEPAY_WEBHOOK_SECRET'],
+          message: 'deve ter no mínimo 32 caracteres',
+        });
+      }
+    }
     // Em produção não há padrão: o bucket real precisa ser configurado de propósito
     // (S3_ENDPOINT continua opcional: vazio na AWS).
     if (!usesLocalS3Defaults(env.NODE_ENV)) {
@@ -134,6 +161,22 @@ const envSchema = envObject
   });
 
 export type Env = z.infer<typeof envSchema>;
+
+// Avisos (não erros) sobre a configuração de pagamento. NUNCA incluem a chave, só o prefixo do
+// ambiente que a identifica.
+export function paymentConfigWarnings(env: Env): string[] {
+  const warnings: string[] = [];
+  if (
+    env.PAYMENT_PROVIDER === 'abacatepay' &&
+    env.NODE_ENV === 'production' &&
+    env.ABACATEPAY_API_KEY?.startsWith('abc_dev_')
+  ) {
+    warnings.push(
+      'ABACATEPAY_API_KEY é uma chave de TESTE (abc_dev_) com NODE_ENV=production: nenhum pagamento real será cobrado',
+    );
+  }
+  return warnings;
+}
 
 export interface EnvIssue {
   variable: string;

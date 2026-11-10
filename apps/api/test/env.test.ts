@@ -1,4 +1,4 @@
-import { EnvError, parseEnv } from '../src/config/env.js';
+import { EnvError, parseEnv, paymentConfigWarnings } from '../src/config/env.js';
 import { validEnv } from './helpers.js';
 
 function failure(source: Record<string, string | undefined>): EnvError {
@@ -167,6 +167,127 @@ describe('parseEnv', () => {
   it('rejeita provedor desconhecido (o Mercado Pago foi removido)', () => {
     const error = failure({ ...validEnv, PAYMENT_PROVIDER: 'mercadopago' });
     expect(error.issues.map((i) => i.variable)).toEqual(['PAYMENT_PROVIDER']);
+    expect(error.message).toContain('"fake" ou "abacatepay"');
+  });
+
+  describe('AbacatePay', () => {
+    const abacate = {
+      ...validEnv,
+      PAYMENT_PROVIDER: 'abacatepay',
+      ABACATEPAY_API_KEY: 'abc_dev_chave-de-teste',
+      ABACATEPAY_WEBHOOK_SECRET: 'segredo-do-webhook-com-no-minimo-32-caracteres',
+    };
+
+    it('exige ABACATEPAY_API_KEY e ABACATEPAY_WEBHOOK_SECRET', () => {
+      const error = failure({ ...validEnv, PAYMENT_PROVIDER: 'abacatepay' });
+      expect(error.issues.map((i) => i.variable).sort()).toEqual([
+        'ABACATEPAY_API_KEY',
+        'ABACATEPAY_WEBHOOK_SECRET',
+      ]);
+      expect(error.message).toContain('obrigatória quando PAYMENT_PROVIDER=abacatepay');
+    });
+
+    it('variável vazia conta como ausente', () => {
+      const error = failure({ ...abacate, ABACATEPAY_API_KEY: '' });
+      expect(error.issues.map((i) => i.variable)).toEqual(['ABACATEPAY_API_KEY']);
+    });
+
+    it('o segredo do webhook precisa de no mínimo 32 caracteres', () => {
+      const error = failure({ ...abacate, ABACATEPAY_WEBHOOK_SECRET: 'curto' });
+      expect(error.issues).toEqual([
+        { variable: 'ABACATEPAY_WEBHOOK_SECRET', message: 'deve ter no mínimo 32 caracteres' },
+      ]);
+    });
+
+    it('aceita com as credenciais e usa a URL padrão da API v2', () => {
+      const env = parseEnv(abacate);
+      expect(env.PAYMENT_PROVIDER).toBe('abacatepay');
+      expect(env.ABACATEPAY_API_KEY).toBe('abc_dev_chave-de-teste');
+      expect(env.ABACATEPAY_API_URL).toBe('https://api.abacatepay.com/v2');
+    });
+
+    it('ABACATEPAY_API_URL pode ser trocada, mas precisa ser uma URL', () => {
+      expect(
+        parseEnv({ ...abacate, ABACATEPAY_API_URL: 'http://localhost:4010/v2' }).ABACATEPAY_API_URL,
+      ).toBe('http://localhost:4010/v2');
+      expect(failure({ ...abacate, ABACATEPAY_API_URL: 'nao-url' }).issues[0]?.variable).toBe(
+        'ABACATEPAY_API_URL',
+      );
+    });
+
+    it('não é exigida no modo fake', () => {
+      expect(() => parseEnv({ ...validEnv, PAYMENT_PROVIDER: 'fake' })).not.toThrow();
+    });
+
+    it('em produção o abacatepay sobe sem ALLOW_FAKE_PAYMENTS', () => {
+      expect(() =>
+        parseEnv({
+          ...abacate,
+          NODE_ENV: 'production',
+          S3_REGION: 'sa-east-1',
+          S3_BUCKET: 'b',
+          S3_ACCESS_KEY_ID: 'k',
+          S3_SECRET_ACCESS_KEY: 's',
+          S3_PUBLIC_URL: 'https://cdn.example.com',
+          S3_FORCE_PATH_STYLE: 'false',
+        }),
+      ).not.toThrow();
+    });
+
+    it('a mensagem de erro nunca ecoa a chave nem o segredo', () => {
+      const error = failure({ ...abacate, ABACATEPAY_WEBHOOK_SECRET: 'curto', PORT: 'x' });
+      expect(error.message).not.toContain('abc_dev_chave-de-teste');
+      expect(error.message).not.toContain('curto');
+    });
+  });
+
+  describe('avisos de configuração de pagamento', () => {
+    it('chave de TESTE (abc_dev_) em produção gera aviso, sem expor a chave', () => {
+      const env = parseEnv({
+        ...validEnv,
+        PAYMENT_PROVIDER: 'abacatepay',
+        ABACATEPAY_API_KEY: 'abc_dev_segredinho',
+        ABACATEPAY_WEBHOOK_SECRET: 'segredo-do-webhook-com-no-minimo-32-caracteres',
+        NODE_ENV: 'production',
+        S3_REGION: 'r',
+        S3_BUCKET: 'b',
+        S3_ACCESS_KEY_ID: 'k',
+        S3_SECRET_ACCESS_KEY: 's',
+        S3_PUBLIC_URL: 'https://cdn.example.com',
+        S3_FORCE_PATH_STYLE: 'false',
+      });
+      const warnings = paymentConfigWarnings(env);
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toContain('abc_dev_');
+      expect(warnings[0]).not.toContain('segredinho');
+    });
+
+    it.each([
+      ['produção com abc_prod_', { NODE_ENV: 'production', ABACATEPAY_API_KEY: 'abc_prod_x' }],
+      [
+        'desenvolvimento com abc_dev_',
+        { NODE_ENV: 'development', ABACATEPAY_API_KEY: 'abc_dev_x' },
+      ],
+      ['sem NODE_ENV com abc_dev_', { ABACATEPAY_API_KEY: 'abc_dev_x' }],
+    ])('sem aviso: %s', (_nome, extra) => {
+      const env = parseEnv({
+        ...validEnv,
+        PAYMENT_PROVIDER: 'abacatepay',
+        ABACATEPAY_WEBHOOK_SECRET: 'segredo-do-webhook-com-no-minimo-32-caracteres',
+        S3_REGION: 'r',
+        S3_BUCKET: 'b',
+        S3_ACCESS_KEY_ID: 'k',
+        S3_SECRET_ACCESS_KEY: 's',
+        S3_PUBLIC_URL: 'https://cdn.example.com',
+        S3_FORCE_PATH_STYLE: 'false',
+        ...extra,
+      });
+      expect(paymentConfigWarnings(env)).toEqual([]);
+    });
+
+    it('o modo fake não gera aviso de chave', () => {
+      expect(paymentConfigWarnings(parseEnv(validEnv))).toEqual([]);
+    });
   });
 
   describe('provedor fake em produção', () => {
