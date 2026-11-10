@@ -79,7 +79,9 @@ export function createHttpClient({
 
     let response: Response;
     let text: string;
+    let rttMs: number;
     try {
+      const sentAt = performance.now();
       response = await (fetchImpl ?? fetch)(`${base}${path}`, {
         method,
         headers,
@@ -87,11 +89,13 @@ export function createHttpClient({
         body: hasBody ? JSON.stringify(options.body ?? {}) : undefined,
         signal,
       });
+      rttMs = performance.now() - sentAt; // até receber os headers
       text = await response.text();
     } catch (err) {
       throw toRequestError(err);
     }
-    recordServerDate(response.headers.get('Date')); // relógio do servidor (contagem do Pix)
+    // Relógio do servidor (contagem do Pix): ignora resposta de cache (Age) e prefere o menor RTT.
+    recordServerDate(response.headers.get('Date'), { age: response.headers.get('Age'), rttMs });
     if (response.ok && text === '') return undefined as T; // 204
 
     let payload: unknown;

@@ -144,7 +144,7 @@ describe('relógio do servidor (header Date)', () => {
     vi.setSystemTime(new Date('2026-11-10T12:00:00.000Z'));
     const { client } = setup(withDate('Tue, 10 Nov 2026 12:10:00 GMT'));
     await client.request('/x');
-    expect(serverNow()).toBe(Date.parse('2026-11-10T12:10:00.500Z'));
+    expect(Math.abs(serverNow() - Date.parse('2026-11-10T12:10:00.500Z'))).toBeLessThan(100);
   });
 
   it('respostas de ERRO também reajustam o relógio', async () => {
@@ -152,7 +152,23 @@ describe('relógio do servidor (header Date)', () => {
     vi.setSystemTime(new Date('2026-11-10T12:00:00.000Z'));
     const { client } = setup(withDate('Tue, 10 Nov 2026 12:05:00 GMT', 404));
     await client.request('/x').catch(() => undefined);
-    expect(serverNow()).toBe(Date.parse('2026-11-10T12:05:00.500Z'));
+    expect(Math.abs(serverNow() - Date.parse('2026-11-10T12:05:00.500Z'))).toBeLessThan(100);
+  });
+
+  it('resposta com Age > 5 s (cache compartilhado) NÃO acerta o relógio', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-10T12:00:00.000Z'));
+    const cached = new Response(JSON.stringify({ data: {} }), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        Date: 'Tue, 10 Nov 2026 11:00:00 GMT',
+        Age: '120',
+      },
+    });
+    const { client } = setup(cached);
+    await client.request('/x');
+    expect(serverNow()).toBe(Date.now()); // sem correção
   });
 
   it('sem header Date legível o relógio local continua valendo', async () => {

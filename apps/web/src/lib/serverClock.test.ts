@@ -50,3 +50,50 @@ describe('serverClock', () => {
     expect(serverNow()).toBe(Date.parse('2026-11-10T12:00:05.500Z'));
   });
 });
+
+describe('serverClock: respostas que não servem para acertar o relógio', () => {
+  it('resposta de cache compartilhado (Age > 5 s) é ignorada: o Date dela é velho', () => {
+    recordServerDate('Tue, 10 Nov 2026 12:10:00 GMT');
+    const before = serverNow();
+    recordServerDate('Tue, 10 Nov 2026 11:00:00 GMT', { age: '120' });
+    expect(serverNow()).toBe(before);
+  });
+
+  it.each(['6', '5.5', '3600'])('Age %s ignora; ', (age) => {
+    recordServerDate('Tue, 10 Nov 2026 12:10:00 GMT');
+    const before = serverNow();
+    recordServerDate('Tue, 10 Nov 2026 12:00:30 GMT', { age });
+    expect(serverNow()).toBe(before);
+  });
+
+  it.each(['0', '1', '5'])('Age %s (até 5 s) vale', (age) => {
+    recordServerDate('Tue, 10 Nov 2026 12:10:00 GMT', { age });
+    expect(serverNow()).toBe(Date.parse('2026-11-10T12:10:00.500Z'));
+  });
+
+  it.each([null, '', 'abc'])('Age ausente ou ilegível (%j) não impede', (age) => {
+    recordServerDate('Tue, 10 Nov 2026 12:10:00 GMT', { age });
+    expect(serverNow()).toBe(Date.parse('2026-11-10T12:10:00.500Z'));
+  });
+
+  it('metade do RTT entra na conta (o Date foi gerado antes de a resposta chegar)', () => {
+    recordServerDate('Tue, 10 Nov 2026 12:10:00 GMT', { rttMs: 400 });
+    expect(serverNow()).toBe(Date.parse('2026-11-10T12:10:00.700Z'));
+  });
+
+  it('prefere a resposta de MENOR RTT: uma resposta lenta posterior não desloca o relógio', () => {
+    recordServerDate('Tue, 10 Nov 2026 12:10:00 GMT', { rttMs: 800 });
+    recordServerDate('Tue, 10 Nov 2026 12:10:00 GMT', { rttMs: 50 }); // melhor: vale
+    const best = serverNow();
+    expect(best).toBe(Date.parse('2026-11-10T12:10:00.525Z'));
+    recordServerDate('Tue, 10 Nov 2026 12:15:00 GMT', { rttMs: 300 }); // pior: ignorada
+    expect(serverNow()).toBe(best);
+  });
+
+  it('depois de 60 s a estimativa é renovada mesmo com RTT pior (o relógio do aparelho anda)', () => {
+    recordServerDate('Tue, 10 Nov 2026 12:10:00 GMT', { rttMs: 50 });
+    vi.advanceTimersByTime(61_000);
+    recordServerDate('Tue, 10 Nov 2026 12:11:10 GMT', { rttMs: 300 });
+    expect(serverNow()).toBe(Date.parse('2026-11-10T12:11:10.650Z'));
+  });
+});
