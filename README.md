@@ -395,3 +395,39 @@ Tudo abaixo é verdade no código de hoje e está registrado no [ARCHITECTURE.md
 
 - **Fontes da Fontshare.** Clash Grotesk e General Sans estão versionadas em `apps/web/src/assets/fonts` (self-host). A licença (FFL) permite uso no próprio site, mas **proíbe redistribuir os arquivos**, e um repositório público os distribui. Antes disso, tirar os `.woff2` do repositório (e do histórico) e baixá-los no build, ou trocar por fontes com licença livre (D27f, `apps/web/src/assets/fonts/README.md`).
 - **Credencial de dev no `.env.example`.** O `apps/api/.env.example` guarda a senha do admin de desenvolvimento (`ADMIN_DEV_PASSWORD`); num repositório público, trocar por um valor fictício (D30g).
+
+## Estrutura do monorepo
+
+```text
+bancada/
+├── apps/
+│   ├── api/                  Express + TypeScript + PostgreSQL
+│   │   ├── src/config/       variáveis de ambiente validadas com Zod
+│   │   ├── src/db/           pool, runner de migrações, migrações .sql e seed
+│   │   ├── src/modules/      products, orders, payments, stock, auth, admin e storage
+│   │   ├── src/shared/       erros, helpers HTTP, slug e proteção CSRF
+│   │   ├── src/scripts/      create-admin
+│   │   ├── test/             testes (Jest + Supertest, contra o Postgres real)
+│   │   ├── Dockerfile e docker-entrypoint.sh
+│   │   └── .env.example
+│   └── web/                  React + Vite (loja e admin)
+│       ├── src/features/     catalog, cart, checkout, orders e admin
+│       ├── src/components/   layout, botões, imagem do produto, diálogo de confirmação
+│       ├── Dockerfile e nginx.conf
+│       └── .env.example
+├── packages/
+│   └── contracts/            schemas Zod e tipos compartilhados entre API e web
+├── docs/screenshots/         imagens deste README
+├── docker-compose.yml        db, minio, minio-init, api e web
+├── .github/workflows/        ci.yml e docker.yml
+└── ARCHITECTURE.md, ROADMAP.md, CLAUDE.md
+```
+
+A API e o web importam o `contracts`; o `contracts` não importa nada dos apps, e a API e o web nunca importam um do outro. O [ARCHITECTURE.md](ARCHITECTURE.md) é a fonte da verdade (fluxos, modelo de dados, decisões) e o [ROADMAP.md](ROADMAP.md) registra o andamento das tarefas.
+
+## Licença e fontes
+
+Este repositório ainda não define uma licença.
+
+- **Clash Grotesk** e **General Sans** (Fontshare / Indian Type Foundry) estão sob a ITF Free Font License (FFL): uso permitido no próprio site, redistribuição dos arquivos proibida. Os `.woff2` oficiais estão em `apps/web/src/assets/fonts`, junto da licença (`LICENSE-Fontshare-FFL.txt`). Veja o aviso em [Limitações conhecidas](#limitações-conhecidas-e-próximos-passos) antes de tornar o repositório público.
+- **JetBrains Mono** vem do pacote `@fontsource-variable/jetbrains-mono` (SIL Open Font License 1.1).
