@@ -17,6 +17,26 @@ export type WebhookOutcome =
   // O provedor não conhece o pagamento (ex.: notificação de teste do painel do provedor): nada é gravado.
   | 'payment_not_found';
 
+// A notificação anuncia algo que o provedor ainda não confirma na reconsulta (ex.: "pago" com o
+// status ainda pendente, ou 404 transitório). Nada foi gravado: a rota responde 503 e o provedor
+// REENVIA. Não grava payment_event, então a deduplicação nunca bloqueia o reenvio.
+export class NotificationNotReadyError extends Error {
+  constructor(readonly paymentId: string) {
+    super('O provedor ainda não confirma o que a notificação anuncia');
+    this.name = 'NotificationNotReadyError';
+  }
+}
+
+// Decisão específica do provedor, tomada DEPOIS da reconsulta e ANTES de gravar qualquer coisa.
+// `payment` é null quando o provedor diz que a cobrança não existe (404).
+export type NotificationVerdict =
+  | { action: 'process'; target?: OrderStatus } // target força o status alvo (ex.: lost -> REFUNDED)
+  | { action: 'retry' };
+
+export interface NotificationOptions {
+  judge?: (payment: Payment | null) => NotificationVerdict;
+}
+
 export interface PaymentWebhookServiceDeps {
   pool: Pool;
   gateway: PaymentGateway;
@@ -45,19 +65,31 @@ export class PaymentWebhookService {
 
   // Fluxo 8.2. NUNCA confia no corpo da notificação: o pagamento vem de gateway.getPayment().
   // Erro do gateway/rede propaga (5xx), sem gravar nada: o provedor reenvia e é reprocessado.
-  async handlePaymentNotification(paymentId: string): Promise<WebhookOutcome> {
+  async handlePaymentNotification(
+    paymentId: string,
+    options: NotificationOptions = {},
+  ): Promise<WebhookOutcome> {
     const { gateway, logger } = this.deps;
+    const retry = (reason: string): never => {
+      logger.warn({ paymentId }, `Webhook: ${reason} (503 para o provedor reenviar)`);
+      throw new NotificationNotReadyError(paymentId);
+    };
     let payment: Payment;
     try {
       payment = await gateway.getPayment(paymentId);
     } catch (err) {
-      // 404 do provedor: não adianta o provedor reenviar. Qualquer outro erro continua 5xx.
+      // 404 do provedor: por padrão não adianta reenviar. Se a notificação anuncia um pagamento
+      // (o veredito do provedor pede nova tentativa), pode ser um 404 transitório: reenvia.
       if (err instanceof GatewayError && err.notFound) {
+        if (options.judge?.(null).action === 'retry') retry('cobrança ainda não encontrada');
         logger.warn({ paymentId }, 'Webhook: pagamento inexistente no provedor (ignorado)');
         return 'payment_not_found';
       }
       throw err;
     }
+
+    const verdict = options.judge?.(payment) ?? { action: 'process' as const };
+    if (verdict.action === 'retry') retry('o provedor ainda não confirma o que foi anunciado');
 
     if (payment.status === 'unknown') {
       logger.warn(
@@ -65,7 +97,8 @@ export class PaymentWebhookService {
         'Webhook: status de pagamento desconhecido (sem mudança)',
       );
     }
-    const target = payment.status === 'unknown' ? null : paymentStatusToOrderStatus(payment.status);
+    const mapped = payment.status === 'unknown' ? null : paymentStatusToOrderStatus(payment.status);
+    const target = verdict.action === 'process' && verdict.target ? verdict.target : mapped;
 
     // Evento, pedido e estoque numa única transação: se algo falhar, nada fica gravado.
     return withTransaction(this.deps.pool, async (client) => {

@@ -216,7 +216,7 @@ describe('assinatura e segredo', () => {
   it('corpo vazio ou sem Content-Type JSON: assinatura calculada sobre os bytes mesmo assim', async () => {
     const empty = await send('', { signature: abacatePaySignature('') });
     expect(empty.status).toBe(400); // assinatura válida, mas não é JSON
-    const noType = await send(eventBody('transparent.completed', 'pix_char_x'), {
+    const noType = await send(eventBody('transparent.refunded', 'pix_char_x'), {
       contentType: 'text/plain',
     });
     expect(noType.status).toBe(200); // a rota lê o corpo cru, qualquer que seja o Content-Type
@@ -292,19 +292,50 @@ describe('eventos tratados e máquina de estados', () => {
     expect((await orderRow(b.orderId)).status).toBe('PENDING');
   });
 
-  it('o corpo diz completed/PAID, mas o /check diz PENDING: NENHUM efeito no pedido (corpo não é confiado)', async () => {
+  it('completed, mas o /check ainda diz PENDING: 503 SEM efeito e SEM evento (a AbacatePay reenvia)', async () => {
     const order = await createOrder();
     fake.checkStatuses.set(order.pixId, 'PENDING');
-    const res = await send(eventBody('transparent.completed', order.pixId, 'PAID'));
-    expect(res.status).toBe(200);
-    expect(res.body.data.outcome).toBe('no_change');
+    const body = eventBody('transparent.completed', order.pixId, 'PAID');
+    const res = await send(body);
+    expect(res.status).toBe(503);
     const row = await orderRow(order.orderId);
     expect(row.status).toBe('PENDING');
     expect(row.payment_id).toBeNull();
     expect(row.paid_at).toBeNull();
-    expect(await events()).toEqual([
-      expect.objectContaining({ status: 'PENDING', outcome: 'no_change' }),
-    ]);
+    // nenhum evento gravado: a deduplicação NÃO pode bloquear o reenvio
+    expect(await events()).toHaveLength(0);
+
+    // o reenvio da AbacatePay chega quando o /check já mostra PAID: é processado normalmente
+    fake.checkStatuses.set(order.pixId, 'PAID');
+    const retry = await send(body);
+    expect(retry.status).toBe(200);
+    expect(retry.body.data.outcome).toBe('applied');
+    expect((await orderRow(order.orderId)).status).toBe('PAID');
+    expect(await events()).toHaveLength(1);
+    await expectLedgerConsistent();
+  });
+
+  it('várias tentativas em 503 seguidas de um sucesso: um único evento e um único applied', async () => {
+    const order = await createOrder();
+    fake.checkStatuses.set(order.pixId, 'PENDING');
+    const body = eventBody('transparent.completed', order.pixId);
+    for (let i = 0; i < 3; i += 1) expect((await send(body)).status).toBe(503);
+    fake.checkStatuses.set(order.pixId, 'PAID');
+    expect((await send(body)).body.data.outcome).toBe('applied');
+    expect((await send(body)).body.data.outcome).toBe('duplicate');
+    expect(await events()).toHaveLength(1);
+  });
+
+  it('refunded e disputed com o /check ainda PENDING: 200 no_change (não há o que reenviar)', async () => {
+    const order = await createOrder();
+    fake.checkStatuses.set(order.pixId, 'PENDING');
+    const refunded = await send(eventBody('transparent.refunded', order.pixId, 'REFUNDED'));
+    expect(refunded.status).toBe(200);
+    expect(refunded.body.data.outcome).toBe('no_change');
+    const disputed = await send(eventBody('transparent.disputed', order.pixId, 'UNDER_DISPUTE'));
+    expect(disputed.status).toBe(200);
+    expect(disputed.body.data.outcome).toBe('duplicate'); // (cobrança, PENDING) já registrado
+    expect((await orderRow(order.orderId)).status).toBe('PENDING');
   });
 
   it('o corpo diz refunded, mas o /check diz PAID (ainda pago): usa o status do /check', async () => {
@@ -367,10 +398,15 @@ describe('eventos tratados e máquina de estados', () => {
     expect((await events()).map((e) => e.status)).toEqual(['PAID', 'REFUNDED']);
   });
 
-  it('lost (disputa perdida, o /check mostra REFUNDED): PAID -> REFUNDED sem devolver estoque', async () => {
+  async function paidOrder(): Promise<Created> {
     const order = await createOrder();
     fake.checkStatuses.set(order.pixId, 'PAID');
     await send(eventBody('transparent.completed', order.pixId));
+    return order;
+  }
+
+  it('lost (disputa perdida, o /check mostra REFUNDED): PAID -> REFUNDED sem devolver estoque', async () => {
+    const order = await paidOrder();
     const stockPaid = await mouseStock();
     fake.checkStatuses.set(order.pixId, 'REFUNDED');
     const res = await send(eventBody('transparent.lost', order.pixId, 'REFUNDED'));
@@ -378,6 +414,62 @@ describe('eventos tratados e máquina de estados', () => {
     expect((await orderRow(order.orderId)).status).toBe('REFUNDED');
     expect(await mouseStock()).toBe(stockPaid);
     await expectLedgerConsistent();
+  });
+
+  it.each(['EXPIRED', 'CANCELLED', 'FAILED', 'REDEEMED', 'APPROVED', 'ALGO_NOVO'])(
+    'lost com o /check em %s (nem PAID, nem PENDING, nem UNDER_DISPUTE): REFUNDED sem devolver estoque (D13)',
+    async (status) => {
+      const order = await paidOrder();
+      const stockPaid = await mouseStock();
+      fake.checkStatuses.set(order.pixId, status);
+      const res = await send(eventBody('transparent.lost', order.pixId, 'REFUNDED'));
+      expect(res.status).toBe(200);
+      expect(res.body.data.outcome).toBe('applied');
+      expect((await orderRow(order.orderId)).status).toBe('REFUNDED');
+      expect(await mouseStock()).toBe(stockPaid);
+      const movements = await pool.query(`SELECT reason FROM stock_movements WHERE order_id = $1`, [
+        order.orderId,
+      ]);
+      expect(movements.rows.map((r) => r.reason)).toEqual(['order']);
+      await expectLedgerConsistent();
+      expect((await events()).at(-1)).toMatchObject({ status, outcome: 'applied' });
+    },
+  );
+
+  it.each(['PAID', 'PENDING', 'UNDER_DISPUTE'])(
+    'lost com o /check ainda em %s: a perda não chegou ao /check, então 503 sem efeito (reenvio)',
+    async (status) => {
+      const order = await paidOrder();
+      fake.checkStatuses.set(order.pixId, status);
+      const body = eventBody('transparent.lost', order.pixId, 'REFUNDED');
+      const res = await send(body);
+      expect(res.status).toBe(503);
+      expect((await orderRow(order.orderId)).status).toBe('PAID');
+      expect((await events()).map((e) => e.status)).toEqual(['PAID']); // só o do pagamento
+      // o reenvio, quando o /check já reflete a perda, é processado
+      fake.checkStatuses.set(order.pixId, 'REFUNDED');
+      expect((await send(body)).body.data.outcome).toBe('applied');
+      expect((await orderRow(order.orderId)).status).toBe('REFUNDED');
+    },
+  );
+
+  it('lost e o /check dá 404: 503 (reenvio), sem evento', async () => {
+    const order = await paidOrder();
+    fake.responder = (req, res) => {
+      if (!req.path.endsWith('/transparents/check')) return 'default';
+      sendJson(res, 404, { success: false, error: 'Pix QR Code not found' });
+    };
+    const res = await send(eventBody('transparent.lost', order.pixId, 'REFUNDED'));
+    expect(res.status).toBe(503);
+    expect((await events()).map((e) => e.status)).toEqual(['PAID']);
+  });
+
+  it('lost num pedido ainda PENDING (nunca foi pago): invalid_transition, sem efeito', async () => {
+    const order = await createOrder();
+    fake.checkStatuses.set(order.pixId, 'EXPIRED');
+    const res = await send(eventBody('transparent.lost', order.pixId, 'REFUNDED'));
+    expect(res.body.data.outcome).toBe('invalid_transition');
+    expect((await orderRow(order.orderId)).status).toBe('PENDING');
   });
 
   it('disputed (o /check mostra UNDER_DISPUTE): sem mudança no pedido, evento registrado', async () => {
@@ -408,13 +500,14 @@ describe('eventos tratados e máquina de estados', () => {
   });
 
   it.each(['EXPIRED', 'CANCELLED', 'FAILED', 'REDEEMED', 'APPROVED', 'ALGO_NOVO'])(
-    'status %s no /check: sem mudança (a AbacatePay não cancela pedido; quem cancela é o admin)',
+    'completed com o /check em %s: não confirma o pagamento, então 503 sem efeito (nem cancela o pedido)',
     async (status) => {
       const order = await createOrder();
       fake.checkStatuses.set(order.pixId, status);
       const res = await send(eventBody('transparent.completed', order.pixId));
-      expect(res.body.data.outcome).toBe('no_change');
+      expect(res.status).toBe(503);
       expect((await orderRow(order.orderId)).status).toBe('PENDING');
+      expect(await events()).toHaveLength(0);
       expect(await mouseStock()).toBe(18);
     },
   );
@@ -467,15 +560,31 @@ describe('entradas inesperadas e falhas', () => {
     ]);
   });
 
-  it('o provedor não conhece a cobrança (404 no /check): 200 payment_not_found e NENHUM evento', async () => {
+  it('completed e o /check dá 404 (transitório): 503 sem evento; o reenvio com o /check certo paga', async () => {
     const order = await createOrder();
     fake.responder = (req, res) => {
       if (!req.path.endsWith('/transparents/check')) return 'default';
       sendJson(res, 404, { success: false, error: 'Pix QR Code not found' });
     };
-    const res = await send(eventBody('transparent.completed', order.pixId));
-    expect(res.status).toBe(200);
-    expect(res.body.data.outcome).toBe('payment_not_found');
+    const body = eventBody('transparent.completed', order.pixId);
+    expect((await send(body)).status).toBe(503);
+    expect(await events()).toHaveLength(0);
+    fake.responder = null;
+    fake.checkStatuses.set(order.pixId, 'PAID');
+    expect((await send(body)).body.data.outcome).toBe('applied');
+  });
+
+  it('refunded/disputed e o /check dá 404: 200 payment_not_found e NENHUM evento (não há o que reenviar)', async () => {
+    const order = await createOrder();
+    fake.responder = (req, res) => {
+      if (!req.path.endsWith('/transparents/check')) return 'default';
+      sendJson(res, 404, { success: false, error: 'Pix QR Code not found' });
+    };
+    for (const event of ['transparent.refunded', 'transparent.disputed']) {
+      const res = await send(eventBody(event, order.pixId));
+      expect(res.status).toBe(200);
+      expect(res.body.data.outcome).toBe('payment_not_found');
+    }
     expect(await events()).toHaveLength(0);
     expect((await orderRow(order.orderId)).status).toBe('PENDING');
   });

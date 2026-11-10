@@ -5,9 +5,13 @@ import type { Pool } from 'pg';
 import type { Logger } from 'pino';
 import { AppError } from '../../shared/errors.js';
 import { findOrderById } from '../orders/orders.repository.js';
+import { ABACATEPAY_HANDLED_EVENTS, judgeAbacatePayEvent } from './abacatepay.events.js';
 import { verifyAbacatePayWebhook } from './abacatepay.signature.js';
 import type { FakePaymentGateway } from './fake.gateway.js';
-import type { PaymentWebhookService } from './payment-webhook.service.js';
+import {
+  NotificationNotReadyError,
+  type PaymentWebhookService,
+} from './payment-webhook.service.js';
 
 export interface PaymentsRouterDeps {
   pool: Pool;
@@ -19,13 +23,6 @@ export interface PaymentsRouterDeps {
   fakeGateway?: FakePaymentGateway;
 }
 
-// Eventos do checkout transparente que mudam (ou podem mudar) o pedido. Qualquer outro: 200 e ignora.
-const HANDLED_EVENTS: ReadonlySet<string> = new Set([
-  'transparent.completed',
-  'transparent.refunded',
-  'transparent.lost',
-  'transparent.disputed',
-]);
 const PAYMENT_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 
 // Lê só o que importa, sem schema rígido (a AbacatePay pode acrescentar campos): o nome do evento e
@@ -86,7 +83,11 @@ export function createPaymentsRouter({
       } catch {
         throw new AppError(400, 'INVALID_JSON', 'JSON inválido');
       }
-      if (!notification || !HANDLED_EVENTS.has(notification.event) || !notification.paymentId) {
+      if (
+        !notification ||
+        !ABACATEPAY_HANDLED_EVENTS.has(notification.event) ||
+        !notification.paymentId
+      ) {
         res.status(200).json({ data: { ignored: true } });
         return;
       }
@@ -94,8 +95,22 @@ export function createPaymentsRouter({
       // 4 a 6 (no serviço): a cobrança é reconsultada em /transparents/check (o status do CORPO
       // nunca é usado), o pedido é achado por orders.checkout_id e vale o fluxo 8.2 (lock do pedido
       // antes do payment_event, deduplicação, regras, estoque). Erro do provedor: 5xx, e a AbacatePay reenvia.
-      const outcome = await webhookService.handlePaymentNotification(notification.paymentId);
-      res.status(200).json({ data: { outcome } });
+      try {
+        const outcome = await webhookService.handlePaymentNotification(notification.paymentId, {
+          judge: judgeAbacatePayEvent(notification.event),
+        });
+        res.status(200).json({ data: { outcome } });
+      } catch (err) {
+        // O /check ainda não confirma o que o evento anuncia: 503 para a AbacatePay reenviar.
+        if (err instanceof NotificationNotReadyError) {
+          throw new AppError(
+            503,
+            'INTERNAL_ERROR',
+            'O pagamento ainda não foi confirmado pelo provedor. Tente de novo.',
+          );
+        }
+        throw err;
+      }
     });
   }
 
