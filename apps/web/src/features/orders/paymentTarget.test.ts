@@ -12,10 +12,10 @@ describe('paymentTarget (mesma regra segura do checkout)', () => {
     });
   });
 
-  it('externa https (Mercado Pago): link externo', () => {
-    expect(paymentTarget('https://www.mercadopago.com.br/c/1', id, origin)).toEqual({
+  it('externa https (checkout externo): link externo', () => {
+    expect(paymentTarget('https://pagamento.example.com/c/1', id, origin)).toEqual({
       kind: 'external',
-      url: 'https://www.mercadopago.com.br/c/1',
+      url: 'https://pagamento.example.com/c/1',
     });
   });
 

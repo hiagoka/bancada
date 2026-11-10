@@ -130,8 +130,8 @@ function PaymentPanel({
 
 export function OrderPage() {
   const { id = '' } = useParams();
-  // Nada de useSearchParams aqui, DE PROPÓSITO: o Mercado Pago volta com collection_status, status,
-  // payment_id... e o status do pedido só vale se vier da API (query string é forjável).
+  // Nada de useSearchParams aqui, DE PROPÓSITO: provedores de pagamento podem voltar para cá com
+  // status, payment_id... e o status do pedido só vale se vier da API (query string é forjável).
   const {
     data: order,
     error,

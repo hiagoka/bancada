@@ -6,7 +6,7 @@ import { request } from './http';
 const simulationResultSchema = z.object({ outcome: z.string() });
 export type SimulationResult = z.infer<typeof simulationResultSchema>;
 
-// POST /dev/payments/simulate: SÓ existe com PAYMENT_PROVIDER=fake (no modo Mercado Pago a rota não
+// POST /dev/payments/simulate: SÓ existe com PAYMENT_PROVIDER=fake (com um provedor real a rota não
 // existe e a API responde 404). O corpo é validado com o mesmo schema da API antes de sair.
 export async function simulatePayment(input: SimulatePaymentInput): Promise<SimulationResult> {
   const body = simulatePaymentInputSchema.parse(input);

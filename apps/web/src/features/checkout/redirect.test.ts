@@ -27,12 +27,12 @@ describe('resolveRedirect', () => {
     });
   });
 
-  it('URL externa http(s) (Mercado Pago): redirecionamento externo', () => {
+  it('URL externa http(s) (checkout externo): redirecionamento externo', () => {
     expect(
-      resolveRedirect('https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=1', id, origin),
+      resolveRedirect('https://pagamento.example.com/checkout/redirect?ref=1', id, origin),
     ).toEqual({
       kind: 'external',
-      url: 'https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=1',
+      url: 'https://pagamento.example.com/checkout/redirect?ref=1',
     });
     expect(resolveRedirect('http://sandbox.test/pay', id, origin)).toEqual({
       kind: 'external',

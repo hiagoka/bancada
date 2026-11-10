@@ -242,7 +242,7 @@ describe('FakeCheckoutPage: bloqueios', () => {
 });
 
 describe('FakeCheckoutPage: erros e invalidação', () => {
-  it('404 do simulador (modo Mercado Pago): "O modo simulado não está ativo neste ambiente" + link para o pedido', async () => {
+  it('404 do simulador (provedor real, sem a rota): "O modo simulado não está ativo neste ambiente" + link para o pedido', async () => {
     mockSimulate.mockRejectedValue(new ApiError(404, 'NOT_FOUND', 'Rota não encontrada'));
     renderPage();
     await ready();

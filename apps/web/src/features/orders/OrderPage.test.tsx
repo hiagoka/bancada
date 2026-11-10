@@ -124,16 +124,16 @@ describe('OrderPage: um teste por status', () => {
     expect(await screen.findByText('SIMULADO')).toBeTruthy();
   });
 
-  it('PENDING com URL externa https (Mercado Pago): link externo com rel noopener', async () => {
+  it('PENDING com URL externa https (checkout externo): link externo com rel noopener', async () => {
     mockGetOrder.mockResolvedValue(
       makeOrder({
         createdAt: new Date().toISOString(),
-        checkoutUrl: 'https://www.mercadopago.com.br/c/1',
+        checkoutUrl: 'https://pagamento.example.com/c/1',
       }),
     );
     renderPage();
     const link = await screen.findByRole('link', { name: 'Ir para o pagamento' });
-    expect(link.getAttribute('href')).toBe('https://www.mercadopago.com.br/c/1');
+    expect(link.getAttribute('href')).toBe('https://pagamento.example.com/c/1');
     expect(link.getAttribute('rel')).toContain('noopener');
   });
 
@@ -199,7 +199,7 @@ describe('OrderPage: janela de pagamento', () => {
     mockGetOrder.mockResolvedValue(
       makeOrder({
         createdAt: new Date().toISOString(),
-        checkoutUrl: 'https://www.mercadopago.com.br/c/1',
+        checkoutUrl: 'https://pagamento.example.com/c/1',
       }),
     );
     renderPage();
@@ -210,7 +210,7 @@ describe('OrderPage: janela de pagamento', () => {
     mockGetOrder.mockResolvedValue(
       makeOrder({
         createdAt: new Date(Date.now() - 31 * 60_000).toISOString(),
-        checkoutUrl: 'https://www.mercadopago.com.br/c/1',
+        checkoutUrl: 'https://pagamento.example.com/c/1',
       }),
     );
     renderPage();
@@ -234,7 +234,7 @@ describe('OrderPage: janela de pagamento', () => {
 });
 
 describe('OrderPage: segurança e privacidade', () => {
-  it('IGNORA os query params do Mercado Pago: o status vem só da API', async () => {
+  it('IGNORA os query params de provedores de pagamento: o status vem só da API', async () => {
     mockGetOrder.mockResolvedValue(makeOrder({ status: 'PENDING' }));
     renderPage(
       `/pedido/${ORDER_ID}?collection_status=approved&status=approved&payment_id=123&merchant_order_id=9&external_reference=x`,

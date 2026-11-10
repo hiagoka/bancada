@@ -26,7 +26,7 @@ type Customer = z.output<typeof customerSchema>;
 const defaultRedirectExternal = (url: string): void => window.location.assign(url);
 
 interface Props {
-  // Redirecionamento para fora do site (Mercado Pago). Injetável para testar sem navegar de verdade.
+  // Redirecionamento para fora do site (provedor com checkout externo). Injetável para testar sem navegar de verdade.
   redirectExternal?: (url: string) => void;
   // Relógio injetável (testes): idade máxima da chave salva.
   now?: () => number;
@@ -248,7 +248,7 @@ export function CheckoutForm({ redirectExternal = defaultRedirectExternal, now }
         >
           {pending ? 'Abrindo o pagamento…' : `Pagar ${formatPrice(total)}`}
         </Button>
-        <p className="muted checkout-note">Você vai pagar pelo Mercado Pago.</p>
+        <p className="muted checkout-note">Você vai pagar por Pix.</p>
       </form>
     </section>
   );

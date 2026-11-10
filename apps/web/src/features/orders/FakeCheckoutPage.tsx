@@ -33,7 +33,7 @@ function failureText(error: unknown): { text: string; simulatorOff: boolean } {
   return { text: 'Não foi possível simular o pagamento. Tente de novo.', simulatorOff: false };
 }
 
-// Substitui o Mercado Pago no modo fake: cada botão chama POST /dev/payments/simulate, que passa
+// Substitui o provedor de pagamento no modo fake: cada botão chama POST /dev/payments/simulate, que passa
 // pelo MESMO tratamento do webhook real.
 export function FakeCheckoutPage() {
   const { id = '' } = useParams();

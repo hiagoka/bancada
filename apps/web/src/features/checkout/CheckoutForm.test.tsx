@@ -256,7 +256,7 @@ describe('chave de idempotência (estável e renovada na hora certa)', () => {
     const external = vi.fn();
     const api = mockApi({
       orders: [
-        created(orderResponse({ checkoutUrl: 'https://www.mercadopago.com.br/pay/1' })),
+        created(orderResponse({ checkoutUrl: 'https://pagamento.example.com/pay/1' })),
         created(),
       ],
     });
@@ -419,18 +419,16 @@ describe('sucesso e redirecionamento', () => {
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['products'] });
   });
 
-  it('URL externa (Mercado Pago): chama o redirecionamento externo e limpa o carrinho', async () => {
+  it('URL externa (checkout externo): chama o redirecionamento externo e limpa o carrinho', async () => {
     cartWith([mouse(), 2]);
     const external = vi.fn();
     mockApi({
-      orders: [created(orderResponse({ checkoutUrl: 'https://www.mercadopago.com.br/c/1' }))],
+      orders: [created(orderResponse({ checkoutUrl: 'https://pagamento.example.com/c/1' }))],
     });
     renderCheckout({ redirectExternal: external });
     await fill();
     await submit();
-    await waitFor(() =>
-      expect(external).toHaveBeenCalledWith('https://www.mercadopago.com.br/c/1'),
-    );
+    await waitFor(() => expect(external).toHaveBeenCalledWith('https://pagamento.example.com/c/1'));
     expect(useCartStore.getState().lines).toEqual([]);
     expect(screen.queryByText('SIMULADO')).toBeNull();
   });
@@ -469,7 +467,7 @@ describe('robustez do sucesso', () => {
   it('se o redirecionamento lançar, NÃO mostra "algo deu errado": o pedido foi criado e o carrinho limpo', async () => {
     cartWith([mouse(), 2]);
     mockApi({
-      orders: [created(orderResponse({ checkoutUrl: 'https://www.mercadopago.com.br/c/1' }))],
+      orders: [created(orderResponse({ checkoutUrl: 'https://pagamento.example.com/c/1' }))],
     });
     const boom = vi.fn(() => {
       throw new Error('navegação bloqueada');
@@ -493,7 +491,7 @@ describe('robustez do sucesso', () => {
         created(
           orderResponse({
             totalCents: 51000,
-            checkoutUrl: 'https://www.mercadopago.com.br/c/1',
+            checkoutUrl: 'https://pagamento.example.com/c/1',
           }),
         ),
       ],
@@ -578,7 +576,7 @@ describe('formulário: validação e acessibilidade', () => {
     expect(emailField().autocomplete).toBe('email');
     expect(emailField().getAttribute('inputmode')).toBe('email');
     expect(container.querySelector('form')?.noValidate).toBe(true);
-    expect(screen.getByText('Você vai pagar pelo Mercado Pago.')).toBeTruthy();
+    expect(screen.getByText('Você vai pagar por Pix.')).toBeTruthy();
   });
 
   it('resumo do pedido: itens e total em reais', () => {

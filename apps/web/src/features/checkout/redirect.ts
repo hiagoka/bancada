@@ -2,8 +2,9 @@ export type RedirectTarget = { kind: 'internal'; to: string } | { kind: 'externa
 
 // Decide para onde ir depois de criar o pedido. O checkoutUrl vem da API, mas só é seguido se for
 // http(s) e sem credenciais embutidas: qualquer outra coisa (javascript:, data:, file:, lixo) cai
-// em /pedido/:id. Mesma origem do web (modo fake) navega pelo router; origem diferente (Mercado
-// Pago) é redirecionamento externo.
+// em /pedido/:id. Mesma origem do web (modo fake) navega pelo router; origem diferente (checkout
+// externo de um provedor) é redirecionamento externo. Sem checkoutUrl (Pix da AbacatePay, D34) vai para
+// /pedido/:id, onde o QR Code e o copia e cola aparecem.
 export function resolveRedirect(
   checkoutUrl: string | null | undefined,
   orderId: string,

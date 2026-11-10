@@ -23,9 +23,7 @@ export function Footer() {
         </nav>
         <section aria-labelledby="footer-pay">
           <h2 id="footer-pay">Pagamento</h2>
-          <p>
-            Pix, cartão e boleto pelo Mercado Pago. No modo de demonstração, o pagamento é simulado.
-          </p>
+          <p>Só Pix, pela AbacatePay. No modo de demonstração, o pagamento é simulado.</p>
         </section>
         <section aria-labelledby="footer-about">
           <h2 id="footer-about">Sobre</h2>
@@ -39,9 +37,9 @@ export function Footer() {
         <div className="container">
           <h2>Como pagar</h2>
           <p>
-            Com o Mercado Pago você é levado ao checkout deles e volta para acompanhar o pedido. No
-            modo simulado, uma tela de demonstração permite aprovar, recusar ou cancelar o
-            pagamento.
+            Você paga por Pix: abra o app do seu banco, leia o QR Code (ou cole o código copia e
+            cola) e a página do pedido confirma o pagamento sozinha. No modo simulado, uma tela de
+            demonstração permite aprovar, recusar ou cancelar o pagamento.
           </p>
         </div>
       </div>

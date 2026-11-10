@@ -107,7 +107,7 @@ describe('simulatePayment', () => {
     });
   });
 
-  it('404 (modo Mercado Pago: a rota não existe) vira ApiError 404', async () => {
+  it('404 (provedor real: a rota não existe) vira ApiError 404', async () => {
     mockFetch(404, { error: { code: 'NOT_FOUND', message: 'Rota não encontrada' } });
     await expect(simulatePayment({ orderId: id, status: 'approved' })).rejects.toMatchObject({
       status: 404,

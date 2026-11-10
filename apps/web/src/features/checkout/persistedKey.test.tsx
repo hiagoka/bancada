@@ -121,7 +121,7 @@ describe('chave de idempotência persistida em sessionStorage', () => {
   it('sucesso (pedido criado e carrinho limpo): apaga a entrada do storage', async () => {
     useCartStore.getState().add(mouse(), 2);
     mockApi({
-      orders: [created(orderResponse({ checkoutUrl: 'https://www.mercadopago.com.br/c/1' }))],
+      orders: [created(orderResponse({ checkoutUrl: 'https://pagamento.example.com/c/1' }))],
     });
     renderCheckout({ redirectExternal: vi.fn() });
     await fill();
