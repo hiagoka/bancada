@@ -140,7 +140,7 @@ export class PaymentWebhookService {
   }
 
   // Trava o pedido (FOR UPDATE). Com orderId do provedor (fake e simulate) vale o id, que pode não
-  // ser um UUID (então o pedido não existe); sem ele (AbacatePay) vale checkout_id + provedor.
+  // ser um UUID (então o pedido não existe); sem ele (AbacatePay) vale checkout_id + provedor (único: índice da migração 003).
   private async lockOrder(db: Db, payment: Payment): Promise<LockedOrder | null> {
     const columns = 'SELECT id, status, total_cents, payment_id FROM orders';
     let result;
@@ -151,8 +151,7 @@ export class PaymentWebhookService {
       ]);
     } else {
       result = await db.query<OrderLockRow>(
-        `${columns} WHERE checkout_id = $1 AND payment_provider = $2
-         ORDER BY created_at LIMIT 1 FOR UPDATE`,
+        `${columns} WHERE checkout_id = $1 AND payment_provider = $2 FOR UPDATE`,
         [payment.id, this.deps.gateway.name],
       );
     }

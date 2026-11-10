@@ -1,4 +1,4 @@
-import { copyFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createPool } from '../src/db/pool.js';
@@ -10,9 +10,9 @@ const migrationsDir = resolve(__dirname, '../src/db/migrations');
 
 // Pasta temporária só com UMA das migrações reais (para testar a evolução de um banco existente).
 const tempDirs: string[] = [];
-function dirWithOnly(file: string): string {
+function dirWithOnly(...files: string[]): string {
   const dir = mkdtempSync(join(tmpdir(), 'bancada-migrations-'));
-  copyFileSync(join(migrationsDir, file), join(dir, file));
+  for (const file of files) copyFileSync(join(migrationsDir, file), join(dir, file));
   tempDirs.push(dir);
   return dir;
 }
@@ -34,11 +34,15 @@ describe('runMigrations', () => {
 
   it('aplica as migrações em ordem e registra cada uma em schema_migrations', async () => {
     const applied = await runMigrations(pool, migrationsDir, silentLogger);
-    expect(applied).toEqual(['001_init.sql', '002_pix.sql']);
+    expect(applied).toEqual(['001_init.sql', '002_pix.sql', '003_checkout_unique.sql']);
     const { rows } = await pool.query(
       'SELECT version, applied_at FROM schema_migrations ORDER BY version',
     );
-    expect(rows.map((r) => r.version)).toEqual(['001_init.sql', '002_pix.sql']);
+    expect(rows.map((r) => r.version)).toEqual([
+      '001_init.sql',
+      '002_pix.sql',
+      '003_checkout_unique.sql',
+    ]);
     expect(rows[0].applied_at).toBeInstanceOf(Date);
     const tables = await pool.query(
       `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'`,
@@ -61,7 +65,7 @@ describe('runMigrations', () => {
     const again = await runMigrations(pool, migrationsDir, silentLogger);
     expect(again).toEqual([]);
     const { rows } = await pool.query('SELECT count(*)::int AS n FROM schema_migrations');
-    expect(rows[0].n).toBe(2);
+    expect(rows[0].n).toBe(3);
   });
 
   it('execuções simultâneas aplicam a migração uma única vez (advisory lock)', async () => {
@@ -70,9 +74,9 @@ describe('runMigrations', () => {
       runMigrations(pool, migrationsDir, silentLogger),
       runMigrations(pool, migrationsDir, silentLogger),
     ]);
-    expect(results.flat()).toEqual(['001_init.sql', '002_pix.sql']);
+    expect(results.flat()).toEqual(['001_init.sql', '002_pix.sql', '003_checkout_unique.sql']);
     const { rows } = await pool.query('SELECT count(*)::int AS n FROM schema_migrations');
-    expect(rows[0].n).toBe(2);
+    expect(rows[0].n).toBe(3);
   });
 
   describe('002_pix.sql (AbacatePay, D34)', () => {
@@ -106,7 +110,7 @@ describe('runMigrations', () => {
     });
 
     it('cria o índice parcial de checkout_id (o webhook acha o pedido por ele)', async () => {
-      await runMigrations(pool, migrationsDir, silentLogger);
+      await runMigrations(pool, dirWithOnly('001_init.sql', '002_pix.sql'), silentLogger);
       const { rows } = await pool.query<{ indexdef: string }>(
         `SELECT indexdef FROM pg_indexes WHERE tablename = 'orders' AND indexname = 'orders_checkout_id_idx'`,
       );
@@ -128,6 +132,7 @@ describe('runMigrations', () => {
       );
       await expect(runMigrations(pool, migrationsDir, silentLogger)).resolves.toEqual([
         '002_pix.sql',
+        '003_checkout_unique.sql',
       ]);
       const { rows } = await pool.query(
         'SELECT checkout_id, checkout_url, pix_code, pix_qr_image, pix_expires_at FROM orders',
@@ -194,6 +199,54 @@ describe('runMigrations', () => {
       writeFileSync(join(dir, '001_ruim.sql'), 'CREATE TABLE corrigida (id INT);');
       await expect(runMigrations(pool, dir, silentLogger)).resolves.toEqual(['001_ruim.sql']);
     });
+  });
+});
+
+describe('003_checkout_unique.sql', () => {
+  let scratch: ScratchDb;
+  let pool: ReturnType<typeof createPool>;
+
+  beforeEach(async () => {
+    scratch = await createScratchDb();
+    pool = createPool(scratch.url);
+    await runMigrations(pool, migrationsDir, silentLogger);
+  });
+
+  afterEach(async () => {
+    await pool.end();
+    await scratch.drop();
+  });
+
+  const insert = (key: string, provider: string, checkoutId: string | null) =>
+    pool.query(
+      `INSERT INTO orders (idempotency_key, request_hash, customer_name, customer_email,
+                           total_cents, payment_provider, checkout_id)
+       VALUES ($1, 'h', 'Ana', 'ana@example.com', 1000, $2, $3)`,
+      [key, provider, checkoutId],
+    );
+
+  it('o mesmo (provedor, checkout_id) não pode estar em dois pedidos', async () => {
+    await insert('k1', 'abacatepay', 'pix_char_1');
+    await expect(insert('k2', 'abacatepay', 'pix_char_1')).rejects.toMatchObject({
+      code: '23505',
+      constraint: 'orders_provider_checkout_id_key',
+    });
+  });
+
+  it('provedores diferentes podem repetir o id, e vários pedidos sem checkout (NULL) convivem', async () => {
+    await insert('k1', 'abacatepay', 'x');
+    await expect(insert('k2', 'fake', 'x')).resolves.toBeDefined();
+    await expect(insert('k3', 'abacatepay', null)).resolves.toBeDefined();
+    await expect(insert('k4', 'abacatepay', null)).resolves.toBeDefined();
+  });
+
+  it('substitui o índice não único da 002 e é idempotente (IF NOT EXISTS)', async () => {
+    const { rows } = await pool.query<{ indexname: string }>(
+      `SELECT indexname FROM pg_indexes WHERE tablename = 'orders' AND indexname LIKE '%checkout%'`,
+    );
+    expect(rows.map((r) => r.indexname)).toEqual(['orders_provider_checkout_id_key']);
+    const sql = readFileSync(join(migrationsDir, '003_checkout_unique.sql'), 'utf8');
+    await expect(pool.query(sql)).resolves.toBeDefined(); // reaplicar não quebra
   });
 });
 
