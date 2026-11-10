@@ -68,6 +68,29 @@ describe('copyText', () => {
     opener.remove();
   });
 
+  it('o textarea do fallback NÃO é aria-hidden (recebe foco) e a seleção usa setSelectionRange (iOS)', async () => {
+    setClipboard(undefined);
+    const observed: { ariaHidden: string | null; start: number; end: number } = {
+      ariaHidden: 'não observado',
+      start: -1,
+      end: -1,
+    };
+    const setRange = vi.spyOn(HTMLTextAreaElement.prototype, 'setSelectionRange');
+    setExecCommand(
+      vi.fn(() => {
+        const area = document.querySelector('textarea');
+        observed.ariaHidden = area?.getAttribute('aria-hidden') ?? null;
+        observed.start = area?.selectionStart ?? -1;
+        observed.end = area?.selectionEnd ?? -1;
+        return true;
+      }),
+    );
+    await copyText('codigo-pix-123');
+    expect(observed.ariaHidden).toBeNull();
+    expect(setRange).toHaveBeenCalledWith(0, 'codigo-pix-123'.length);
+    expect([observed.start, observed.end]).toEqual([0, 'codigo-pix-123'.length]);
+  });
+
   it('o fallback também falhando: devolve false, sem lançar e sem sobrar <textarea>', async () => {
     setClipboard({ writeText: vi.fn().mockRejectedValue(new Error('x')) });
     setExecCommand(vi.fn().mockReturnValue(false));

@@ -1,6 +1,6 @@
 // Copia texto para a área de transferência, sem window.alert e sem lançar: devolve se deu certo.
 // 1) navigator.clipboard.writeText (só existe em contexto seguro: HTTPS ou localhost);
-// 2) fallback com <textarea> temporário + document.execCommand('copy') (HTTP em IP de rede, navegador
+// 2) fallback com <textarea> temporário (sem aria-hidden: ele recebe foco por alguns milissegundos) + document.execCommand('copy') (HTTP em IP de rede, navegador
 //    antigo ou permissão negada). Fora da tela e somente leitura, para não abrir o teclado do celular.
 export async function copyText(text: string): Promise<boolean> {
   if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
@@ -21,7 +21,6 @@ function copyWithSelection(text: string): boolean {
   const area = document.createElement('textarea');
   area.value = text;
   area.setAttribute('readonly', '');
-  area.setAttribute('aria-hidden', 'true');
   area.style.position = 'fixed';
   area.style.top = '0';
   area.style.left = '-9999px';
@@ -30,6 +29,7 @@ function copyWithSelection(text: string): boolean {
   try {
     area.focus();
     area.select();
+    area.setSelectionRange(0, text.length); // iOS: select() sozinho não seleciona textarea readonly
     return document.execCommand('copy');
   } catch {
     return false;
