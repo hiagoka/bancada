@@ -1,6 +1,12 @@
-import type { AdminProduct, AdminProductInput, AdminProductUpdate } from '@bancada/contracts';
+import type {
+  AdminProduct,
+  AdminProductInput,
+  AdminProductUpdate,
+  StockAdjustment,
+  StockAdjustmentResult,
+} from '@bancada/contracts';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { createAdminProduct, updateAdminProduct } from '../../api/adminProducts';
+import { adjustAdminStock, createAdminProduct, updateAdminProduct } from '../../api/adminProducts';
 import { PRODUCTS_QUERY_KEY } from '../catalog/useProducts';
 import { useAdminMutation } from './useAdminMutation';
 
@@ -27,6 +33,16 @@ export function useUpdateProduct(id: string) {
   return useAdminMutation<AdminProduct, Error, AdminProductUpdate>({
     mutationKey: ['product', 'update'],
     mutationFn: (patch) => updateAdminProduct(id, patch),
+    onSuccess: () => invalidateProductCaches(client, id),
+  });
+}
+
+// Ajuste de estoque: a loja mostra o estoque novo, então invalida também ['products'].
+export function useAdjustStock(id: string) {
+  const client = useQueryClient();
+  return useAdminMutation<StockAdjustmentResult, Error, StockAdjustment>({
+    mutationKey: ['stock', 'adjust'],
+    mutationFn: (adjustment) => adjustAdminStock(id, adjustment),
     onSuccess: () => invalidateProductCaches(client, id),
   });
 }

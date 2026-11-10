@@ -3,16 +3,18 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createAdminProduct, updateAdminProduct } from '../../api/adminProducts';
+import { adjustAdminStock, createAdminProduct, updateAdminProduct } from '../../api/adminProducts';
 import { createQueryClient } from '../../app/queryClient';
-import { useCreateProduct, useUpdateProduct } from './useProductMutations';
+import { useAdjustStock, useCreateProduct, useUpdateProduct } from './useProductMutations';
 
 vi.mock('../../api/adminProducts', () => ({
   createAdminProduct: vi.fn(),
   updateAdminProduct: vi.fn(),
+  adjustAdminStock: vi.fn(),
 }));
 const mockCreate = vi.mocked(createAdminProduct);
 const mockUpdate = vi.mocked(updateAdminProduct);
+const mockAdjust = vi.mocked(adjustAdminStock);
 
 const ID = '6ba7b810-9dad-41d1-80b5-00c04fd430c8';
 const wrap =
@@ -24,6 +26,7 @@ const wrap =
 beforeEach(() => {
   mockCreate.mockReset();
   mockUpdate.mockReset();
+  mockAdjust.mockReset();
 });
 
 describe('useCreateProduct', () => {
@@ -82,5 +85,37 @@ describe('useUpdateProduct', () => {
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['admin', 'products'] });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['admin', 'product', ID] });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['products'] });
+  });
+});
+
+describe('useAdjustStock', () => {
+  it('mutationKey ["admin","stock","adjust"] e invalida lista, detalhe e loja', async () => {
+    mockAdjust.mockResolvedValue({ product: { id: ID }, movement: { stockAfter: 8 } } as never);
+    const client = createQueryClient();
+    const invalidate = vi.spyOn(client, 'invalidateQueries');
+    const { result } = renderHook(() => useAdjustStock(ID), { wrapper: wrap(client) });
+    await act(async () => {
+      await result.current.mutateAsync({ delta: 5, reason: 'restock' });
+    });
+    expect(mockAdjust).toHaveBeenCalledWith(ID, { delta: 5, reason: 'restock' });
+    expect(client.getMutationCache().getAll().at(-1)?.options.mutationKey).toEqual([
+      'admin',
+      'stock',
+      'adjust',
+    ]);
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['admin', 'products'] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['admin', 'product', ID] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['products'] });
+  });
+
+  it('erro (409): nada é invalidado', async () => {
+    mockAdjust.mockRejectedValue(new Error('x'));
+    const client = createQueryClient();
+    const invalidate = vi.spyOn(client, 'invalidateQueries');
+    const { result } = renderHook(() => useAdjustStock(ID), { wrapper: wrap(client) });
+    await act(async () => {
+      await result.current.mutateAsync({ delta: -99, reason: 'adjustment' }).catch(() => undefined);
+    });
+    expect(invalidate).not.toHaveBeenCalled();
   });
 });
