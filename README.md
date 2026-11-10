@@ -360,9 +360,9 @@ O que eles cobrem (entre outras coisas): total com o preço do banco, replay e c
 - `CI` (`.github/workflows/ci.yml`): a cada push na `main` e em pull request, com um PostgreSQL como _service_: `npm ci`, build do contracts, lint, `format:check`, typecheck, sobe o MinIO pelo `docker-compose.yml` (o que também prova o `minio` e o `minio-init`), `npm test` com `REQUIRE_MINIO=true` e build.
 - `Docker` (`.github/workflows/docker.yml`, D33): sobe a stack inteira com `docker compose up --build` e confere com `curl` a API e o seed (inclusive que um preço editado sobrevive ao restart), a loja (fallback de SPA, cache e gzip), o admin (criar admin pelo script, login, cookie `httpOnly` e CORS) e o upload de imagem direto ao MinIO. Roda no push na `main`, em pull requests que mexem em `apps/api`, `apps/web`, `packages` ou na infra de Docker, e sob demanda (aba Actions, "Run workflow").
 
-## Limitações conhecidas e próximos passos
+## Próximos passos
 
-Tudo abaixo é verdade no código de hoje e está registrado no [ARCHITECTURE.md](ARCHITECTURE.md).
+Limitações conhecidas de hoje e o que viria depois. Tudo abaixo é verdade no código atual e está registrado no [ARCHITECTURE.md](ARCHITECTURE.md).
 
 **Pedidos e pagamento**
 
@@ -429,5 +429,5 @@ A API e o web importam o `contracts`; o `contracts` não importa nada dos apps, 
 
 Este repositório ainda não define uma licença.
 
-- **Clash Grotesk** e **General Sans** (Fontshare / Indian Type Foundry) estão sob a ITF Free Font License (FFL): uso permitido no próprio site, redistribuição dos arquivos proibida. Os `.woff2` oficiais estão em `apps/web/src/assets/fonts`, junto da licença (`LICENSE-Fontshare-FFL.txt`). Veja o aviso em [Limitações conhecidas](#limitações-conhecidas-e-próximos-passos) antes de tornar o repositório público.
+- **Clash Grotesk** e **General Sans** (Fontshare / Indian Type Foundry) estão sob a ITF Free Font License (FFL): uso permitido no próprio site, redistribuição dos arquivos proibida. Os `.woff2` oficiais estão em `apps/web/src/assets/fonts`, junto da licença (`LICENSE-Fontshare-FFL.txt`). Veja o aviso em [Próximos passos](#próximos-passos) antes de tornar o repositório público.
 - **JetBrains Mono** vem do pacote `@fontsource-variable/jetbrains-mono` (SIL Open Font License 1.1).
