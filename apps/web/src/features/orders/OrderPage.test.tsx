@@ -8,7 +8,7 @@ import { ApiError, NetworkError } from '../../api/http';
 import { getOrder } from '../../api/orders';
 import { ORDER_ID, makeOrder } from '../../test/orderFixtures';
 import { OrderPage } from './OrderPage';
-import { POLL_INTERVAL_MS, POLL_LIMIT_MS, orderQueryKey } from './useOrder';
+import { PIX_SLOW_POLL_MS, POLL_INTERVAL_MS, POLL_LIMIT_MS, orderQueryKey } from './useOrder';
 import { resetServerClock } from '../../lib/serverClock';
 
 vi.mock('../../api/orders', () => ({ getOrder: vi.fn() }));
@@ -403,8 +403,8 @@ describe('OrderPage: pagamento por Pix (D34)', () => {
     await screen.findByRole('heading', { name: 'Pague com Pix' });
     await act(async () => void (await vi.advanceTimersByTimeAsync(POLL_LIMIT_MS + 30_000)));
     const calls = mockGetOrder.mock.calls.length;
-    await act(async () => void (await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 2 + 100)));
-    expect(mockGetOrder.mock.calls.length).toBeGreaterThan(calls);
+    await act(async () => void (await vi.advanceTimersByTimeAsync(PIX_SLOW_POLL_MS * 2 + 100)));
+    expect(mockGetOrder.mock.calls.length).toBeGreaterThan(calls); // agora a cada 10 s, não a cada 3 s
     expect(screen.queryByRole('button', { name: 'Atualizar' })).toBeNull();
     expect(screen.queryByText(/Ainda aguardando a confirmação/)).toBeNull();
   });

@@ -8,9 +8,33 @@ export const POLL_INTERVAL_MS = 3000;
 // Depois de 5 minutos de polling a tela para e oferece "Atualizar" (o pedido ainda PENDING).
 export const POLL_LIMIT_MS = 5 * 60 * 1000;
 
-// Pedido com Pix (D34): o polling segue enquanto PENDING até pix.expiresAt + 30 s (um webhook atrasado
-// ainda precisa ser visto), em vez de parar aos 5 minutos. A validade é do relógio do servidor.
+// Pedido com Pix (D34): o prazo do polling é o da cobrança, não os 5 minutos. Cronograma (relógio do
+// servidor):
+//   - primeiros 5 min do pedido ........................... a cada 3 s (o cliente está pagando agora)
+//   - depois, até pix.expiresAt + 30 s ..................... a cada 10 s
+//   - depois da tolerância, por até 10 min ................. a cada 15 s (o webhook da AbacatePay
+//     pode confirmar um pagamento feito no último segundo bem depois da validade)
+// Além disso o foco da aba consulta de novo (enquanto PENDING). Sem isso um pedido aberto por ~30 min
+// faria ~600 consultas; assim faz ~250.
 export const PIX_POLL_GRACE_MS = 30 * 1000;
+export const PIX_FAST_WINDOW_MS = 5 * 60 * 1000;
+export const PIX_SLOW_POLL_MS = 10 * 1000;
+export const PIX_LATE_POLL_MS = 15 * 1000;
+export const PIX_LATE_WINDOW_MS = 10 * 60 * 1000;
+
+// Intervalo do polling de um pedido PENDING com Pix, ou false (sem polling).
+export function pixPollInterval(
+  order: { createdAt: string; pix: { expiresAt: string } },
+  now: number,
+): number | false {
+  const deadline = Date.parse(order.pix.expiresAt) + PIX_POLL_GRACE_MS;
+  if (now <= deadline) {
+    return now - Date.parse(order.createdAt) < PIX_FAST_WINDOW_MS
+      ? POLL_INTERVAL_MS
+      : PIX_SLOW_POLL_MS;
+  }
+  return now <= deadline + PIX_LATE_WINDOW_MS ? PIX_LATE_POLL_MS : false;
+}
 
 export const orderQueryKey = (id: string) => ['order', id] as const;
 
@@ -43,13 +67,12 @@ export function useOrder(id: string) {
     refetchInterval: (q) => {
       const data = q.state.data;
       if (data?.status !== 'PENDING') return false;
-      // Com Pix o prazo é a validade da cobrança (+ tolerância), não os 5 minutos.
-      if (data.pix) {
-        const deadline = Date.parse(data.pix.expiresAt) + PIX_POLL_GRACE_MS;
-        return serverNow() <= deadline ? POLL_INTERVAL_MS : false;
-      }
+      if (data.pix) return pixPollInterval({ ...data, pix: data.pix }, serverNow());
       return stopped ? false : POLL_INTERVAL_MS;
     },
+    // Voltar para a aba: um pedido com Pix ainda PENDING é consultado de novo, mesmo que o polling
+    // já tenha parado (o pagamento pode ter sido confirmado enquanto a aba estava em segundo plano).
+    refetchOnWindowFocus: (q) => q.state.data?.status === 'PENDING' && Boolean(q.state.data.pix),
   });
 
   const { refetch } = query;
