@@ -438,6 +438,25 @@ describe('OrderPage: pagamento por Pix (D34)', () => {
     expect(screen.queryByText('O tempo para pagar acabou.')).toBeNull();
   });
 
+  it('depois de mostrar o expirado, um PAID que chega pelo polling troca a tela para Pago (sem recarregar)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    mockGetOrder.mockResolvedValue(
+      makeOrder({ pix: pixIn(4), createdAt: new Date().toISOString() }),
+    );
+    renderPage();
+    await screen.findByRole('heading', { name: 'Pague com Pix' });
+    await act(async () => void (await vi.advanceTimersByTimeAsync(40_000))); // zerou e passou a tolerância
+    expect(await screen.findByText('O tempo para pagar acabou.')).toBeTruthy();
+    expect(screen.getByText(/Se você já pagou, aguarde/)).toBeTruthy();
+    expect(screen.queryByText(/Não pague de novo/)).toBeNull();
+    mockGetOrder.mockResolvedValue(
+      makeOrder({ status: 'PAID', pix: null, paidAt: new Date().toISOString() }),
+    );
+    await act(async () => void (await vi.advanceTimersByTimeAsync(20_000))); // próximo tick do polling lento
+    expect(await screen.findByText(/Obrigado pela compra!/)).toBeTruthy();
+    expect(screen.queryByText('O tempo para pagar acabou.')).toBeNull();
+  });
+
   it('Pix já vencido ao abrir a página (pedido ainda PENDING): mostra que o tempo acabou, sem QR Code', async () => {
     mockGetOrder.mockResolvedValue(makeOrder({ pix: pixIn(-600) }));
     renderPage();

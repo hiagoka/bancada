@@ -72,7 +72,10 @@ export function PixPayment({ orderId, pix, onExpired }: Props) {
         <p>
           <strong>O tempo para pagar acabou.</strong>
         </p>
-        <p>Este Pix não vale mais e este pedido não será cobrado. Faça um novo pedido.</p>
+        <p>
+          Se você já pagou, aguarde: a confirmação pode levar alguns minutos e esta página atualiza
+          sozinha. Se não pagou, faça um novo pedido.
+        </p>
         <div className="pix__actions">
           <ButtonLink to="/">Voltar ao catálogo</ButtonLink>
           <ButtonLink variant="secondary" to="/carrinho">
@@ -152,7 +155,11 @@ export function PixPayment({ orderId, pix, onExpired }: Props) {
         <p role="status" className="pix__hint">
           Conferindo se o pagamento chegou…
         </p>
-      ) : null}
+      ) : (
+        <p className="order-panel__hint">
+          Acabou de pagar? A confirmação costuma levar poucos segundos. Não pague de novo.
+        </p>
+      )}
     </section>
   );
 }

@@ -214,6 +214,34 @@ describe('PixPayment: contagem e expiração', () => {
     expect(document.body.textContent).not.toContain(BR_CODE);
   });
 
+  it('o texto de expirado é VERDADEIRO: quem já pagou espera, quem não pagou faz novo pedido; nada de "não será cobrado"', async () => {
+    renderPix(1);
+    await tick(1);
+    const panel = screen
+      .getByText('O tempo para pagar acabou.')
+      .closest('.order-panel') as HTMLElement;
+    expect(panel.textContent).toContain(
+      'Se você já pagou, aguarde: a confirmação pode levar alguns minutos e esta página atualiza sozinha. Se não pagou, faça um novo pedido.',
+    );
+    expect(panel.textContent).not.toMatch(/não será cobrado|nao sera cobrado/i);
+    expect(panel.textContent).not.toMatch(/não vale mais/i);
+  });
+
+  it('a dica "Não pague de novo" aparece com o Pix ativo e SOME no estado expirado (sem contradição)', async () => {
+    renderPix(2);
+    expect(screen.getByText(/Não pague de novo/)).toBeTruthy();
+    await tick(2);
+    expect(screen.getByText('O tempo para pagar acabou.')).toBeTruthy();
+    expect(screen.queryByText(/Não pague de novo/)).toBeNull();
+  });
+
+  it('enquanto confere o pagamento (zero, ainda sem resposta) a dica também some', async () => {
+    renderPix(1, () => new Promise<void>(() => undefined));
+    await tick(1);
+    expect(screen.getByText(/Conferindo se o pagamento chegou/)).toBeTruthy();
+    expect(screen.queryByText(/Não pague de novo/)).toBeNull();
+  });
+
   it('a consulta final falhando (rede) também termina na tela de expirado, sem erro não tratado', async () => {
     renderPix(1, async () => {
       throw new Error('rede');

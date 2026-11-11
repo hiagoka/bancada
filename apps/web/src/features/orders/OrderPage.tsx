@@ -55,17 +55,12 @@ function PaymentPanel({
   // do provedor real; o modo fake (sem pix) continua indo para o checkout simulado, abaixo.
   if (order.pix) {
     return (
-      <>
-        <PixPayment
-          key={order.pix.expiresAt}
-          orderId={order.id}
-          pix={order.pix}
-          onExpired={onPixExpired}
-        />
-        <p className="order-panel__hint">
-          Acabou de pagar? A confirmação costuma levar poucos segundos. Não pague de novo.
-        </p>
-      </>
+      <PixPayment
+        key={order.pix.expiresAt}
+        orderId={order.id}
+        pix={order.pix}
+        onExpired={onPixExpired}
+      />
     );
   }
 
