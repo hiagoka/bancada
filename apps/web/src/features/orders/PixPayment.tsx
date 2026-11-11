@@ -23,7 +23,12 @@ interface Props {
 export function PixPayment({ orderId, pix, onExpired }: Props) {
   const { display, expired, announcement } = usePixCountdown(pix.expiresAt);
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  // checked = a última consulta DEU CERTO e o pedido segue PENDING. failed = ela falhou (rede): não
+  // dá para dizer que o tempo acabou sem ter conferido.
   const [checked, setChecked] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  const retryingRef = useRef(false); // guarda imediata contra duplo clique (o state só vale no próximo render)
   const fieldRef = useRef<HTMLInputElement>(null);
   const asked = useRef(false);
   const onExpiredRef = useRef(onExpired);
@@ -35,13 +40,28 @@ export function PixPayment({ orderId, pix, onExpired }: Props) {
     void (async () => {
       try {
         await onExpiredRef.current();
-      } catch {
-        // Falha de rede na última consulta: o tempo acabou do mesmo jeito.
-      } finally {
         setChecked(true);
+      } catch {
+        setFailed(true);
       }
     })();
   }, [expired]);
+
+  const retryCheck = async (): Promise<void> => {
+    if (retryingRef.current) return;
+    retryingRef.current = true;
+    setRetrying(true);
+    try {
+      await onExpiredRef.current();
+      setFailed(false);
+      setChecked(true);
+    } catch {
+      setFailed(true);
+    } finally {
+      retryingRef.current = false;
+      setRetrying(false);
+    }
+  };
 
   useEffect(() => {
     if (copyState !== 'copied') return;
@@ -65,6 +85,25 @@ export function PixPayment({ orderId, pix, onExpired }: Props) {
     fieldRef.current?.focus();
     fieldRef.current?.select();
   };
+
+  if (expired && failed) {
+    return (
+      <div className="order-panel">
+        <div role="alert" className="pix__alert">
+          <p>
+            <strong>Não conseguimos conferir seu pagamento.</strong>
+          </p>
+          <p>
+            O tempo do Pix acabou, mas a consulta falhou. Se você já pagou, aguarde: esta página
+            continua tentando e atualiza sozinha.
+          </p>
+        </div>
+        <Button aria-disabled={retrying} onClick={() => void retryCheck()}>
+          {retrying ? 'Conferindo…' : 'Tentar de novo'}
+        </Button>
+      </div>
+    );
+  }
 
   if (expired && checked) {
     return (

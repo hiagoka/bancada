@@ -457,6 +457,50 @@ describe('OrderPage: pagamento por Pix (D34)', () => {
     expect(screen.queryByText('O tempo para pagar acabou.')).toBeNull();
   });
 
+  it('a última consulta falha DE VERDADE (refetch real com a API fora do ar): não declara o tempo esgotado; "Tentar de novo" confere', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    mockGetOrder.mockResolvedValue(
+      makeOrder({ pix: pixIn(4), createdAt: new Date().toISOString() }),
+    );
+    renderPage();
+    await screen.findByRole('heading', { name: 'Pague com Pix' });
+    mockGetOrder.mockRejectedValue(new NetworkError());
+    await act(async () => void (await vi.advanceTimersByTimeAsync(5000)));
+    expect(await screen.findByText('Não conseguimos conferir seu pagamento.')).toBeTruthy();
+    expect(screen.queryByText('O tempo para pagar acabou.')).toBeNull();
+
+    // a API volta: "Tentar de novo" confere e, continuando PENDING, mostra o tempo esgotado
+    mockGetOrder.mockResolvedValue(
+      makeOrder({ pix: pixIn(-10), createdAt: new Date().toISOString() }),
+    );
+    await act(async () => {
+      screen.getByRole('button', { name: 'Tentar de novo' }).click();
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    expect(await screen.findByText('O tempo para pagar acabou.')).toBeTruthy();
+  });
+
+  it('com a API falhando a página MANTÉM o polling (e um PAID que chegar troca a tela)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    mockGetOrder.mockResolvedValue(
+      makeOrder({ pix: pixIn(4), createdAt: new Date().toISOString() }),
+    );
+    renderPage();
+    await screen.findByRole('heading', { name: 'Pague com Pix' });
+    mockGetOrder.mockRejectedValue(new NetworkError());
+    await act(async () => void (await vi.advanceTimersByTimeAsync(5000)));
+    await screen.findByText('Não conseguimos conferir seu pagamento.');
+    const calls = mockGetOrder.mock.calls.length;
+    await act(async () => void (await vi.advanceTimersByTimeAsync(20_000)));
+    expect(mockGetOrder.mock.calls.length).toBeGreaterThan(calls); // seguiu tentando
+    mockGetOrder.mockResolvedValue(
+      makeOrder({ status: 'PAID', pix: null, paidAt: new Date().toISOString() }),
+    );
+    await act(async () => void (await vi.advanceTimersByTimeAsync(20_000)));
+    expect(await screen.findByText(/Obrigado pela compra!/)).toBeTruthy();
+    expect(screen.queryByText('Não conseguimos conferir seu pagamento.')).toBeNull();
+  });
+
   it('Pix já vencido ao abrir a página (pedido ainda PENDING): mostra que o tempo acabou, sem QR Code', async () => {
     mockGetOrder.mockResolvedValue(makeOrder({ pix: pixIn(-600) }));
     renderPage();

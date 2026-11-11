@@ -200,7 +200,11 @@ export function OrderPage() {
             order={order}
             pollingStopped={pollingStopped}
             onRefresh={restartPolling}
-            onPixExpired={refetch}
+            onPixExpired={async () => {
+              // O refetch do TanStack NÃO rejeita: resolve com o resultado (isError). Olhar o resultado.
+              const result = await refetch();
+              if (result.isError) throw result.error;
+            }}
           />
           <OrderSummary order={order} />
           <dl className="order-dates">

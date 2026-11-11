@@ -98,3 +98,12 @@
   flex-wrap: wrap;
   gap: var(--space-3);
 }
+
+.pix__alert {
+  padding: var(--space-3) var(--space-4);
+  border: var(--border) solid var(--ink);
+  border-left: 8px solid var(--danger);
+  background: var(--paper);
+  display: grid;
+  gap: var(--space-2);
+}

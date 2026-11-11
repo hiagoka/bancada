@@ -242,11 +242,67 @@ describe('PixPayment: contagem e expiração', () => {
     expect(screen.queryByText(/Não pague de novo/)).toBeNull();
   });
 
-  it('a consulta final falhando (rede) também termina na tela de expirado, sem erro não tratado', async () => {
+  it('a última consulta FALHOU (rede): NÃO declara o tempo esgotado; diz que não conseguiu conferir e oferece "Tentar de novo"', async () => {
     renderPix(1, async () => {
       throw new Error('rede');
     });
     await tick(1);
+    expect(screen.getByText('Não conseguimos conferir seu pagamento.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Tentar de novo' })).toBeTruthy();
+    expect(screen.queryByText('O tempo para pagar acabou.')).toBeNull();
+    expect(screen.queryByText(/Não pague de novo/)).toBeNull();
+    expect(document.body.textContent).not.toContain(BR_CODE); // o Pix vencido não fica à mostra
+    expect(screen.getByRole('alert').textContent).toContain(
+      'Não conseguimos conferir seu pagamento',
+    );
+  });
+
+  it('"Tentar de novo": confere outra vez; se agora deu certo (continua PENDING) mostra que o tempo acabou', async () => {
+    const onExpired = vi
+      .fn<() => Promise<void>>()
+      .mockRejectedValueOnce(new Error('rede'))
+      .mockResolvedValueOnce(undefined);
+    renderPix(1, onExpired);
+    await tick(1);
+    await act(
+      async () => void fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' })),
+    );
+    expect(onExpired).toHaveBeenCalledTimes(2);
+    expect(screen.getByText('O tempo para pagar acabou.')).toBeTruthy();
+    expect(screen.queryByText('Não conseguimos conferir seu pagamento.')).toBeNull();
+  });
+
+  it('"Tentar de novo" falhando de novo mantém o aviso (e o botão volta a ficar disponível)', async () => {
+    const onExpired = vi.fn<() => Promise<void>>().mockRejectedValue(new Error('rede'));
+    renderPix(1, onExpired);
+    await tick(1);
+    await act(
+      async () => void fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' })),
+    );
+    expect(screen.getByText('Não conseguimos conferir seu pagamento.')).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: 'Tentar de novo' }).getAttribute('aria-disabled'),
+    ).toBe('false');
+  });
+
+  it('durante o "Tentar de novo": "Conferindo…" e duplo clique = uma consulta só', async () => {
+    let finish!: () => void;
+    const onExpired = vi
+      .fn<() => Promise<void>>()
+      .mockRejectedValueOnce(new Error('rede'))
+      .mockImplementationOnce(() => new Promise<void>((resolve) => (finish = resolve)));
+    renderPix(1, onExpired);
+    await tick(1);
+    const button = screen.getByRole('button', { name: 'Tentar de novo' });
+    await act(async () => {
+      fireEvent.click(button);
+      fireEvent.click(button);
+    });
+    expect(onExpired).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole('button', { name: 'Conferindo…' }).getAttribute('aria-disabled')).toBe(
+      'true',
+    );
+    await act(async () => finish());
     expect(screen.getByText('O tempo para pagar acabou.')).toBeTruthy();
   });
 
